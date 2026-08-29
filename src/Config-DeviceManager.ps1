@@ -96,17 +96,17 @@ function Set-WcdDeviceManagerStatus {
 
     $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $moduleName = 'Config-DeviceManager'
-    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Start'
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Start'
 
     try {
         $devices = @(Get-WcdPnPDevices)
     } catch {
         $note = 'Impossible d interroger le Gestionnaire de peripheriques via CIM: {0}' -f $_.Exception.Message
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $note
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'error'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'error'
 
         return [pscustomobject]@{
-            Step     = 'DeviceManagerEtat'
+            Step     = 'DeviceManagerStatus'
             Success  = $false
             Severity = 'ERROR'
             Error    = $note
@@ -158,10 +158,10 @@ function Set-WcdDeviceManagerStatus {
 
         $message = 'Erreurs Device Manager detectees ({0}): {1}{2}' -f $errorDevices.Count, $errorSummary, $warningSummary
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'error'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'error'
 
         return [pscustomobject]@{
-            Step     = 'DeviceManagerEtat'
+            Step     = 'DeviceManagerStatus'
             Success  = $false
             Severity = 'ERROR'
             Error    = $message
@@ -171,20 +171,20 @@ function Set-WcdDeviceManagerStatus {
     if ($warningDevices.Count -gt 0) {
         $message = 'Warnings Device Manager detectes ({0}): {1}' -f $warningDevices.Count, (Format-WcdDeviceManagerSummary -Devices $warningDevices)
         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'warning'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'warning'
 
         return [pscustomobject]@{
-            Step     = 'DeviceManagerEtat'
+            Step     = 'DeviceManagerStatus'
             Success  = $true
             Severity = 'WARNING'
             Error    = $message
         }
     }
 
-    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Device Manager: aucun warning ni aucune erreur detecte.'
-    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'success'
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Device Manager: no warnings or errors detected.'
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'success'
     return [pscustomobject]@{
-        Step     = 'DeviceManagerEtat'
+        Step     = 'DeviceManagerStatus'
         Success  = $true
         Severity = 'INFO'
         Error    = ''

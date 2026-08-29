@@ -36,50 +36,50 @@ function Set-WcdTaskbarLeft {
 
     # 1. Alignement a gauche
     try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignementGauche' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Start'
         Set-WcdRegistryValue -Path $registryPath -Name 'TaskbarAl' -Value 0 -PropertyType DWord
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Barre des taches: alignement a gauche.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignementGauche' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'TaskbarAlignementGauche'; Success = $true; Error = '' }
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Taskbar: aligned left.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Finish' -Kind 'success'
+        $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $true; Error = '' }
     } catch {
         $note = $_.Exception.Message
         if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
-            $note = 'Cle verrouillee par GPO ou acces refuse.'
+            $note = 'Registry key locked by GPO or access denied.'
         }
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Barre des taches alignement: {0}" -f $note)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignementGauche' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'TaskbarAlignementGauche'; Success = $false; Error = $note }
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar align: {0}" -f $note)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Finish' -Kind 'error'
+        $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $false; Error = $note }
     }
 
     # 2. Desactiver les Widgets (commente: bloque par GPO dans certains environnements)
     # try {
     #     Set-WcdRegistryValue -Path $registryPath -Name 'TaskbarDa' -Value 0 -PropertyType DWord
-    #     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Barre des taches: widgets desactives.'
-    #     $results += [pscustomobject]@{ Step = 'DesactiverWidgets'; Success = $true; Error = '' }
+    #     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Taskbar: widgets disabled.'
+    #     $results += [pscustomobject]@{ Step = 'DisableWidgets'; Success = $true; Error = '' }
     # } catch {
     #     $note = $_.Exception.Message
     #     if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
-    #         $note = 'Cle verrouillee par GPO ou acces refuse.'
+    #         $note = 'Registry key locked by GPO or access denied.'
     #     }
-    #     Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Barre des taches widgets: {0}" -f $note)
-    #     $results += [pscustomobject]@{ Step = 'DesactiverWidgets'; Success = $false; Error = $note }
+    #     Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar widgets: {0}" -f $note)
+    #     $results += [pscustomobject]@{ Step = 'DisableWidgets'; Success = $false; Error = $note }
     # }
 
     # 3. Desactiver la Vue des taches
     try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DesactiverVueTaches' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Start'
         Set-WcdRegistryValue -Path $registryPath -Name 'ShowTaskViewButton' -Value 0 -PropertyType DWord
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Barre des taches: vue des taches desactivee.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DesactiverVueTaches' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'DesactiverVueTaches'; Success = $true; Error = '' }
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Taskbar: task view disabled.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Finish' -Kind 'success'
+        $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $true; Error = '' }
     } catch {
         $note = $_.Exception.Message
         if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
-            $note = 'Cle verrouillee par GPO ou acces refuse.'
+            $note = 'Registry key locked by GPO or access denied.'
         }
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Barre des taches vue taches: {0}" -f $note)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DesactiverVueTaches' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'DesactiverVueTaches'; Success = $false; Error = $note }
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar task view: {0}" -f $note)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Finish' -Kind 'error'
+        $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $false; Error = $note }
     }
 
     return $results

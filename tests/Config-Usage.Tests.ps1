@@ -80,12 +80,12 @@ Describe 'Config-Usage' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1
-            $results[0].Step | Should -Be 'UsageCitrix'
+            $results[0].Step | Should -Be 'VdiWorkspace'
             $results[0].Success | Should -BeTrue
             Assert-MockCalled -CommandName 'Open-WcdUrl' -Times 1 -ParameterFilter { $Url -eq 'https://example.com/citrix' }
         } else {
             $results.Count | Should Be 1
-            $results[0].Step | Should Be 'UsageCitrix'
+            $results[0].Step | Should Be 'VdiWorkspace'
             $results[0].Success | Should Be $true
             Assert-MockCalled 'Open-WcdUrl' 1
         }

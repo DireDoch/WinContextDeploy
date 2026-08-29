@@ -109,18 +109,18 @@ function Get-WcdTechnicalStepLabels {
     param()
 
     return @{
-        'EcranBatterie10min'       = 'Ecran batterie 10 min'
-        'EcranSecteur15min'        = 'Ecran secteur 15 min'
-        'CapotBatterieNeRienFaire' = 'Capot batterie: ne rien faire'
-        'CapotSecteurNeRienFaire'  = 'Capot secteur: ne rien faire'
+        'ScreenTimeoutBattery'       = 'Ecran batterie 10 min'
+        'ScreenTimeoutAc'        = 'Ecran secteur 15 min'
+        'LidActionBatteryNone' = 'Capot batterie: ne rien faire'
+        'LidActionAcNone'  = 'Capot secteur: ne rien faire'
         'SetActiveSchemeCurrent'   = 'Profil alimentation actif'
-        'DecimalEtMonetaire'       = 'Decimal et monetaire'
-        'TaskbarAlignementGauche'  = 'Alignement a gauche'
-        'DesactiverVueTaches'      = 'Vue des taches desactivee'
-        'LangueWindows'            = 'Langue Windows'
-        'ClavierWindows'           = 'Clavier Windows'
+        'DecimalAndCurrency'       = 'Decimal et monetaire'
+        'TaskbarAlignLeft'  = 'Alignement a gauche'
+        'DisableTaskView'      = 'Vue des taches desactivee'
+        'DisplayLanguage'            = 'Langue Windows'
+        'KeyboardLayout'           = 'Clavier Windows'
         'SAPFrontEnd'              = 'SAP PP1'
-        'UsageCitrix'              = 'Citrix'
+        'VdiWorkspace'              = 'Citrix'
         'ApplicationsSkip'         = 'Applications ignorees'
         'AppSoftwareCenter'        = 'Software Center'
         'AppOutlook'               = 'Outlook'
@@ -132,7 +132,7 @@ function Get-WcdTechnicalStepLabels {
         'EngineerSkip'             = 'Configuration ingenieur ignoree'
         'EngineerNvidia'           = 'Nvidia'
         'EngineerGPS'              = 'GPS'
-        'DeviceManagerEtat'        = 'Device manager'
+        'DeviceManagerStatus'        = 'Device manager'
         'AS400Presence'            = 'AS400'
         'AutovuePresence'          = 'Autovue'
     }
@@ -159,22 +159,22 @@ function Get-WcdModuleProgressPlan {
     return @{
         'Config-Power' = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
             @(
-                'EcranBatterie10min',
-                'EcranSecteur15min',
-                'CapotSecteurNeRienFaire',
-                'CapotBatterieNeRienFaire',
+                'ScreenTimeoutBattery',
+                'ScreenTimeoutAc',
+                'LidActionAcNone',
+                'LidActionBatteryNone',
                 'SetActiveSchemeCurrent'
             )
         } else {
             @(
-                'EcranSecteur15min',
+                'ScreenTimeoutAc',
                 'SetActiveSchemeCurrent'
             )
         }
-        'Config-Decimal' = @('DecimalEtMonetaire')
-        'Config-TaskbarLeft' = @('TaskbarAlignementGauche', 'DesactiverVueTaches')
-        'Config-Language' = @('LangueWindows', 'ClavierWindows')
-        'Config-Usage' = if ($ExecutionOptions.Environment -eq 'Vdi') { @('UsageCitrix') } else { @('SAPFrontEnd') }
+        'Config-Decimal' = @('DecimalAndCurrency')
+        'Config-TaskbarLeft' = @('TaskbarAlignLeft', 'DisableTaskView')
+        'Config-Language' = @('DisplayLanguage', 'KeyboardLayout')
+        'Config-Usage' = if ($ExecutionOptions.Environment -eq 'Vdi') { @('VdiWorkspace') } else { @('SAPFrontEnd') }
         'Config-Applications' = if ($ExecutionOptions.OpenApps) {
             @(
                 'AppSoftwareCenter',
@@ -189,7 +189,7 @@ function Get-WcdModuleProgressPlan {
             @('ApplicationsSkip')
         }
         'Config-Engineer' = $engineerSteps
-        'Config-DeviceManager' = @('DeviceManagerEtat')
+        'Config-DeviceManager' = @('DeviceManagerStatus')
     }
 }
 

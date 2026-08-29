@@ -47,7 +47,7 @@ function Set-WcdPrinterConfiguration {
     $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
 
     if (-not $AddPrinter) {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Imprimante: ajout refuse par l utilisateur.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Printer: add declined by the technician.'
         return [pscustomobject]@{ Step = 'PrinterSkip'; Success = $true; Error = '' }
     }
 
@@ -58,15 +58,15 @@ function Set-WcdPrinterConfiguration {
 
     try {
         if (-not (Test-Path -LiteralPath $printerPath)) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message 'Imprimante: Find and add Printer introuvable.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message 'Printer: printer tool not found.'
             return [pscustomobject]@{ Step = 'PrinterAdd'; Success = $false; Error = 'Find and add Printer introuvable.' }
         }
 
         Open-WcdPrinterTool -Path $printerPath
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Imprimante: Find and add Printer ouvert.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Printer: printer tool opened.'
         return [pscustomobject]@{ Step = 'PrinterAdd'; Success = $true; Error = '' }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Imprimante: {0}' -f $_.Exception.Message)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Printer: {0}' -f $_.Exception.Message)
         return [pscustomobject]@{ Step = 'PrinterAdd'; Success = $false; Error = $_.Exception.Message }
     }
 }

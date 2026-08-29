@@ -44,6 +44,31 @@ param(
 $T = if ($ScriptUI -eq 'EN') {
     @{
         BannerSubtitle          = 'Post-image configuration and quick device diagnostics'
+        Checklist               = @{
+            Taskbar        = 'Taskbar aligned left'
+            SoftwareCenter = 'Software Center'
+            DeviceManager  = 'Device Manager'
+            Outlook        = 'Outlook'
+            Signature      = 'Mail signature'
+            Vpn            = 'VPN client'
+            Wifi           = 'Wi-Fi'
+            Snipping       = 'Snipping Tool'
+            Erp            = 'ERP client'
+            Language       = 'Display language'
+            Keyboard       = 'Keyboard layout'
+            Decimal        = 'Decimal separator'
+            Power          = 'Power options'
+            Terminal       = 'Terminal emulator'
+            Teams          = 'Teams'
+            NetworkDrives  = 'Network drives'
+            Sync           = 'Account sync'
+            Vdi            = 'Citrix / VDI'
+            Cad            = 'CAD viewer'
+            Printers       = 'Printers'
+            Desktop        = 'Windows desktop'
+            Helpdesk       = 'Helpdesk portal'
+            Favorites      = 'Browser favorites'
+        }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
         KeyWorkstation          = 'W'
@@ -135,6 +160,31 @@ $T = if ($ScriptUI -eq 'EN') {
 } else {
     @{
         BannerSubtitle          = 'Configuration post-image et diagnostic rapide du poste'
+        Checklist               = @{
+            Taskbar        = 'Taskbar a gauche'
+            SoftwareCenter = 'Software Center'
+            DeviceManager  = 'Device Manager'
+            Outlook        = 'Outlook'
+            Signature      = 'Signature courriel'
+            Vpn            = 'Client VPN'
+            Wifi           = 'Wifi'
+            Snipping       = 'Outil Capture'
+            Erp            = 'Client ERP'
+            Language       = 'Langue d affichage'
+            Keyboard       = 'Disposition clavier'
+            Decimal        = 'Separateur decimal'
+            Power          = 'Options d alimentation'
+            Terminal       = 'Emulateur terminal'
+            Teams          = 'Teams'
+            NetworkDrives  = 'Lecteurs reseau'
+            Sync           = 'Synchronisation du compte'
+            Vdi            = 'Citrix / VDI'
+            Cad            = 'Visionneuse CAO'
+            Printers       = 'Imprimantes'
+            Desktop        = 'Bureau Windows'
+            Helpdesk       = 'Portail de soutien'
+            Favorites      = 'Favoris du navigateur'
+        }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
         KeyWorkstation          = 'P'
@@ -1009,99 +1059,99 @@ function Get-WcdFinalChecklistEntries {
     $standardManualDetail = $T.StandardManualDetail
     $powerStepKeys = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
         @(
-            'EcranBatterie10min',
-            'EcranSecteur15min',
-            'CapotSecteurNeRienFaire',
-            'CapotBatterieNeRienFaire',
+            'ScreenTimeoutBattery',
+            'ScreenTimeoutAc',
+            'LidActionAcNone',
+            'LidActionBatteryNone',
             'SetActiveSchemeCurrent'
         )
     } else {
         @(
-            'EcranSecteur15min',
+            'ScreenTimeoutAc',
             'SetActiveSchemeCurrent'
         )
     }
 
-    $entries += Resolve-WcdAutomaticEntry -Label 'Taskbar a gauche' -ResultLookup $lookup -StepKeys @('TaskbarAlignementGauche', 'DesactiverVueTaches') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Taskbar -ResultLookup $lookup -StepKeys @('TaskbarAlignLeft', 'DisableTaskView') -StepLabels $StepLabels
 
     if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label 'Software center ok' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.SoftwareCenter -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Software center ok' -ResultLookup $lookup -StepKeys @('AppSoftwareCenter') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.SoftwareCenter -ResultLookup $lookup -StepKeys @('AppSoftwareCenter') -StepLabels $StepLabels
     }
 
-    $entries += Resolve-WcdAutomaticEntry -Label 'Device manager' -ResultLookup $lookup -StepKeys @('DeviceManagerEtat') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
 
     if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label 'Outlook' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Outlook -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Outlook' -ResultLookup $lookup -StepKeys @('AppOutlook') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Outlook -ResultLookup $lookup -StepKeys @('AppOutlook') -StepLabels $StepLabels
     }
 
-    $entries += New-WcdDiagnosticEntry -Label 'Signature' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Signature -Kind 'manual' -Detail $standardManualDetail
 
     if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label 'Global protect' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Vpn -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Global protect' -ResultLookup $lookup -StepKeys @('AppGlobalProtect') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Vpn -ResultLookup $lookup -StepKeys @('AppGlobalProtect') -StepLabels $StepLabels
     }
 
-    $entries += New-WcdDiagnosticEntry -Label 'Wifi' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Wifi -Kind 'manual' -Detail $standardManualDetail
 
     if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label 'Snag it/Snipping Tool' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Snipping -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Snag it/Snipping Tool' -ResultLookup $lookup -StepKeys @('AppSnipIt') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Snipping -ResultLookup $lookup -StepKeys @('AppSnipIt') -StepLabels $StepLabels
     }
 
     if ($ExecutionOptions.Environment -eq 'Workstation') {
-        $entries += Resolve-WcdAutomaticEntry -Label 'SAP PP1' -ResultLookup $lookup -StepKeys @('SAPFrontEnd') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Erp -ResultLookup $lookup -StepKeys @('SAPFrontEnd') -StepLabels $StepLabels
     } else {
-        $entries += New-WcdDiagnosticEntry -Label 'SAP PP1' -Kind 'na' -Detail $T.SecondaryNA
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Erp -Kind 'na' -Detail $T.SecondaryNA
     }
 
-    $entries += Resolve-WcdAutomaticEntry -Label 'Language ok' -ResultLookup $lookup -StepKeys @('LangueWindows') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label 'Clavier ok' -ResultLookup $lookup -StepKeys @('ClavierWindows') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label 'Decimal (reg-set)' -ResultLookup $lookup -StepKeys @('DecimalEtMonetaire') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label 'Power options' -ResultLookup $lookup -StepKeys $powerStepKeys -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Language -ResultLookup $lookup -StepKeys @('DisplayLanguage') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Keyboard -ResultLookup $lookup -StepKeys @('KeyboardLayout') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Decimal -ResultLookup $lookup -StepKeys @('DecimalAndCurrency') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Power -ResultLookup $lookup -StepKeys $powerStepKeys -StepLabels $StepLabels
 
     if ($ExecutionOptions.Environment -eq 'Workstation') {
-        $entries += Resolve-WcdAutomaticEntry -Label 'AS400' -ResultLookup $lookup -StepKeys @('AS400Presence') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Terminal -ResultLookup $lookup -StepKeys @('AS400Presence') -StepLabels $StepLabels
     } else {
-        $entries += New-WcdDiagnosticEntry -Label 'AS400' -Kind 'na' -Detail $T.SecondaryNA
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Terminal -Kind 'na' -Detail $T.SecondaryNA
     }
 
     if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label 'Teams' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Teams -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Teams' -ResultLookup $lookup -StepKeys @('AppTeams') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Teams -ResultLookup $lookup -StepKeys @('AppTeams') -StepLabels $StepLabels
     }
 
-    $entries += New-WcdDiagnosticEntry -Label 'Lecteurs reseau' -Kind 'manual' -Detail $standardManualDetail
-    $entries += New-WcdDiagnosticEntry -Label 'Synchronisation' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.NetworkDrives -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Sync -Kind 'manual' -Detail $standardManualDetail
 
     if ($ExecutionOptions.Environment -eq 'Vdi') {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Citrix' -ResultLookup $lookup -StepKeys @('UsageCitrix') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Vdi -ResultLookup $lookup -StepKeys @('VdiWorkspace') -StepLabels $StepLabels
     } else {
-        $entries += New-WcdDiagnosticEntry -Label 'Citrix' -Kind 'na' -Detail $T.PrimaryNA
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Vdi -Kind 'na' -Detail $T.PrimaryNA
     }
 
     if ($ExecutionOptions.Environment -eq 'Workstation') {
-        $entries += Resolve-WcdAutomaticEntry -Label 'Autovue' -ResultLookup $lookup -StepKeys @('AutovuePresence') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Cad -ResultLookup $lookup -StepKeys @('AutovuePresence') -StepLabels $StepLabels
     } else {
-        $entries += New-WcdDiagnosticEntry -Label 'Autovue' -Kind 'na' -Detail $T.SecondaryNA
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Cad -Kind 'na' -Detail $T.SecondaryNA
     }
 
-    $entries += New-WcdDiagnosticEntry -Label 'Imprimantes' -Kind 'manual' -Detail $standardManualDetail
-    $entries += New-WcdDiagnosticEntry -Label 'Bureau' -Kind 'manual' -Detail $T.DeskWindowsDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Printers -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Desktop -Kind 'manual' -Detail $T.DeskWindowsDetail
 
     if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label 'My Support' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Helpdesk -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-WcdAutomaticEntry -Label 'My Support' -ResultLookup $lookup -StepKeys @('AppServiceNow') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Helpdesk -ResultLookup $lookup -StepKeys @('AppServiceNow') -StepLabels $StepLabels
     }
 
-    $entries += New-WcdDiagnosticEntry -Label 'Favoris' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Favorites -Kind 'manual' -Detail $standardManualDetail
     return $entries
 }
 
@@ -1234,7 +1284,7 @@ foreach ($mod in $modules) {
         }
     } catch {
         $modError = $_.Exception.Message
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Module ${modName} crash: {0}" -f $modError)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Module ${modName} crashed: {0}" -f $modError)
     }
 
     $duration = (Get-Date) - $startTime
@@ -1287,7 +1337,7 @@ if ($null -ne $as400Diagnostic) {
 
     $as400Severity = Get-WcdResultSeverity -Result $as400Diagnostic
     if ($as400Severity -eq 'WARNING') {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AS400: {0}' -f $as400Diagnostic.Error)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Terminal emulator: {0}' -f $as400Diagnostic.Error)
     } else {
         $detectedAs400Path = ''
         if ($null -ne $as400Diagnostic.PSObject.Properties['Path'] -and -not [string]::IsNullOrWhiteSpace([string]$as400Diagnostic.Path)) {
@@ -1295,9 +1345,9 @@ if ($null -ne $as400Diagnostic) {
         }
 
         if (-not [string]::IsNullOrWhiteSpace($detectedAs400Path)) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AS400: present ({0}).' -f $detectedAs400Path)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Terminal emulator: present ({0}).' -f $detectedAs400Path)
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'AS400: present.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Terminal emulator: present.'
         }
     }
 }
@@ -1308,7 +1358,7 @@ if ($null -ne $autovueDiagnostic) {
 
     $autovueSeverity = Get-WcdResultSeverity -Result $autovueDiagnostic
     if ($autovueSeverity -eq 'WARNING') {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AutoVue: {0}' -f $autovueDiagnostic.Error)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('CAD viewer: {0}' -f $autovueDiagnostic.Error)
     } else {
         $detectedAutovuePath = ''
         if ($null -ne $autovueDiagnostic.PSObject.Properties['Path'] -and -not [string]::IsNullOrWhiteSpace([string]$autovueDiagnostic.Path)) {
@@ -1316,9 +1366,9 @@ if ($null -ne $autovueDiagnostic) {
         }
 
         if (-not [string]::IsNullOrWhiteSpace($detectedAutovuePath)) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AutoVue: present ({0}).' -f $detectedAutovuePath)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('CAD viewer: present ({0}).' -f $detectedAutovuePath)
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'AutoVue: present.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'CAD viewer: present.'
         }
     }
 }
@@ -1421,14 +1471,14 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
     }
 
     try {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Preparation export historique vers: {0}' -f $HistoryLogPath)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Preparing history export to: {0}' -f $HistoryLogPath)
         Export-WcdHistoryLog -LocalLogPath $resolvedLogPath -HistoryLogPath $HistoryLogPath -DiagnosticLines $finalDiagnosticLines | Out-Null
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Historique exporte vers: {0}' -f $HistoryLogPath)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('History exported to: {0}' -f $HistoryLogPath)
         Write-Host ($T.HistoryExported -f $HistoryLogPath) -ForegroundColor Green
     } catch {
         $finalizationExitCode = 2
         $historyError = $_.Exception.Message
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Export historique impossible: {0}' -f $historyError)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('History export failed: {0}' -f $historyError)
         Write-Host ($T.HistoryExportFailed -f $historyError) -ForegroundColor Yellow
     }
 } elseif (-not $NonInteractive) {

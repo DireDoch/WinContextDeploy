@@ -22,17 +22,17 @@ Describe 'Config-TaskbarLeft' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
-            ($results | Where-Object Step -eq 'TaskbarAlignementGauche').Success | Should -BeTrue
-            ($results | Where-Object Step -eq 'DesactiverVueTaches').Success | Should -BeTrue
-            Get-Content -Path $logPath -Raw | Should -Match 'alignement a gauche'
-            Get-Content -Path $logPath -Raw | Should -Match 'vue des taches desactivee'
+            ($results | Where-Object Step -eq 'TaskbarAlignLeft').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'DisableTaskView').Success | Should -BeTrue
+            Get-Content -Path $logPath -Raw | Should -Match 'aligned left'
+            Get-Content -Path $logPath -Raw | Should -Match 'task view disabled'
             Assert-MockCalled -CommandName 'Set-WcdRegistryValue' -Times 2
         } else {
             $results.Count | Should Be 2
-            ($results | Where-Object Step -eq 'TaskbarAlignementGauche').Success | Should Be $true
-            ($results | Where-Object Step -eq 'DesactiverVueTaches').Success | Should Be $true
-            Get-Content -Path $logPath -Raw | Should Match 'alignement a gauche'
-            Get-Content -Path $logPath -Raw | Should Match 'vue des taches desactivee'
+            ($results | Where-Object Step -eq 'TaskbarAlignLeft').Success | Should Be $true
+            ($results | Where-Object Step -eq 'DisableTaskView').Success | Should Be $true
+            Get-Content -Path $logPath -Raw | Should Match 'aligned left'
+            Get-Content -Path $logPath -Raw | Should Match 'task view disabled'
             Assert-MockCalled 'Set-WcdRegistryValue' 2
         }
     }
@@ -47,15 +47,15 @@ Describe 'Config-TaskbarLeft' {
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
             ($results | Where-Object { -not $_.Success }).Count | Should -Be 2
-            ($results | Where-Object Step -eq 'TaskbarAlignementGauche').Error | Should -Match 'GPO|acces refuse'
-            ($results | Where-Object Step -eq 'DesactiverVueTaches').Error | Should -Match 'GPO|acces refuse'
-            Get-Content -Path $logPath -Raw | Should -Match 'Barre des taches'
+            ($results | Where-Object Step -eq 'TaskbarAlignLeft').Error | Should -Match 'GPO|acces refuse'
+            ($results | Where-Object Step -eq 'DisableTaskView').Error | Should -Match 'GPO|acces refuse'
+            Get-Content -Path $logPath -Raw | Should -Match 'Taskbar'
         } else {
             $results.Count | Should Be 2
             ($results | Where-Object { -not $_.Success }).Count | Should Be 2
-            ($results | Where-Object Step -eq 'TaskbarAlignementGauche').Error | Should Match 'GPO|acces refuse'
-            ($results | Where-Object Step -eq 'DesactiverVueTaches').Error | Should Match 'GPO|acces refuse'
-            Get-Content -Path $logPath -Raw | Should Match 'Barre des taches'
+            ($results | Where-Object Step -eq 'TaskbarAlignLeft').Error | Should Match 'GPO|acces refuse'
+            ($results | Where-Object Step -eq 'DisableTaskView').Error | Should Match 'GPO|acces refuse'
+            Get-Content -Path $logPath -Raw | Should Match 'Taskbar'
         }
     }
 }

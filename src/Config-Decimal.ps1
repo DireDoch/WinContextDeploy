@@ -57,18 +57,18 @@ function Set-WcdDecimalConfiguration {
     $moduleName = 'Config-Decimal'
 
     try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalAndCurrency' -Event 'Start'
         Set-WcdRegistryValue -Path $intlPath -Name 'sDecimal' -Value '.'
         Set-WcdRegistryValue -Path $intlPath -Name 'sThousandSep' -Value ','
         Set-WcdRegistryValue -Path $intlPath -Name 'sMonDecimalSep' -Value '.'
         Set-WcdRegistryValue -Path $intlPath -Name 'sMonetaryDecimal' -Value '.'
         Set-WcdRegistryValue -Path $intlPath -Name 'sMonThousandSep' -Value ','
         Set-WcdDecimalThreadCulture -DecimalSeparator '.' -ThousandsSeparator ','
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Decimales: symboles numeriques et monetaires forces a un point.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Finish' -Kind 'success'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Regional: decimal and currency separators forced to a period.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalAndCurrency' -Event 'Finish' -Kind 'success'
 
         return [pscustomobject]@{
-            Step    = 'DecimalEtMonetaire'
+            Step    = 'DecimalAndCurrency'
             Success = $true
             LogPath = $resolvedLogPath
             Error   = ''
@@ -76,13 +76,13 @@ function Set-WcdDecimalConfiguration {
     } catch {
         $note = $_.Exception.Message
         if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
-            $note = 'Cle verrouillee par GPO ou acces refuse.'
+            $note = 'Registry key locked by GPO or access denied.'
         }
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Decimales: {0}" -f $note)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Regional: {0}" -f $note)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalAndCurrency' -Event 'Finish' -Kind 'error'
 
         return [pscustomobject]@{
-            Step    = 'DecimalEtMonetaire'
+            Step    = 'DecimalAndCurrency'
             Success = $false
             LogPath = $resolvedLogPath
             Error   = $note

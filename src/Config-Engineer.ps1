@@ -69,7 +69,7 @@ function Set-WcdEngineerConfiguration {
     $moduleName = 'Config-Engineer'
 
     if ($EngineerTypes.Count -eq 1 -and $EngineerTypes[0] -eq 'None') {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Ingenieur: aucune configuration requise.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Optional tools: nothing selected.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Start'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Finish' -Kind 'success'
         return @([pscustomobject]@{ Step = 'EngineerSkip'; Success = $true; Error = '' })
@@ -95,11 +95,11 @@ function Set-WcdEngineerConfiguration {
                 try {
                     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Start'
                     Open-WcdUrlInChrome -Url $url -ChromePath $chromePath
-                    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Ingenieur: Nvidia ouvert ({0})." -f $url)
+                    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Optional tool: NVIDIA page opened ({0})." -f $url)
                     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Finish' -Kind 'success'
                     $results += [pscustomobject]@{ Step = 'EngineerNvidia'; Success = $true; Error = '' }
                 } catch {
-                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Ingenieur Nvidia: {0}" -f $_.Exception.Message)
+                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Optional tool NVIDIA: {0}" -f $_.Exception.Message)
                     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Finish' -Kind 'error'
                     $results += [pscustomobject]@{ Step = 'EngineerNvidia'; Success = $false; Error = $_.Exception.Message }
                 }
@@ -112,11 +112,11 @@ function Set-WcdEngineerConfiguration {
                 try {
                     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Start'
                     Open-WcdUrlInChrome -Url $url -ChromePath $chromePath
-                    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Ingenieur: GPS ouvert ({0})." -f $url)
+                    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Optional tool: GPS portal opened ({0})." -f $url)
                     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Finish' -Kind 'success'
                     $results += [pscustomobject]@{ Step = 'EngineerGPS'; Success = $true; Error = '' }
                 } catch {
-                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Ingenieur GPS: {0}" -f $_.Exception.Message)
+                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Optional tool GPS: {0}" -f $_.Exception.Message)
                     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Finish' -Kind 'error'
                     $results += [pscustomobject]@{ Step = 'EngineerGPS'; Success = $false; Error = $_.Exception.Message }
                 }

@@ -105,13 +105,13 @@ Describe 'WcdHelpers' {
         $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions
 
         if ($script:PesterMajorVersion -ge 5) {
-            $plan['Config-Power'] | Should -Be @('EcranSecteur15min', 'SetActiveSchemeCurrent')
-            $plan['Config-Usage'] | Should -Be @('UsageCitrix')
+            $plan['Config-Power'] | Should -Be @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
+            $plan['Config-Usage'] | Should -Be @('VdiWorkspace')
             $plan['Config-Applications'] | Should -Be @('ApplicationsSkip')
             $plan['Config-Engineer'] | Should -Be @('EngineerSkip')
         } else {
-            ($plan['Config-Power'] -join ',') | Should Be 'EcranSecteur15min,SetActiveSchemeCurrent'
-            ($plan['Config-Usage'] -join ',') | Should Be 'UsageCitrix'
+            ($plan['Config-Power'] -join ',') | Should Be 'ScreenTimeoutAc,SetActiveSchemeCurrent'
+            ($plan['Config-Usage'] -join ',') | Should Be 'VdiWorkspace'
             ($plan['Config-Applications'] -join ',') | Should Be 'ApplicationsSkip'
             ($plan['Config-Engineer'] -join ',') | Should Be 'EngineerSkip'
         }

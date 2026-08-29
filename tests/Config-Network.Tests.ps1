@@ -42,13 +42,13 @@ Describe 'Config-Network' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 3
-            ($results | Where-Object Step -eq 'NetworkAdapterEtat').Severity | Should -Be 'INFO'
+            ($results | Where-Object Step -eq 'NetworkAdapterStatus').Severity | Should -Be 'INFO'
             ($results | Where-Object Step -eq 'NetworkPing8888').Severity | Should -Be 'INFO'
             ($results | Where-Object Step -eq 'RefreshNetworkPlaces').Severity | Should -Be 'INFO'
             Assert-MockCalled -CommandName 'Invoke-WcdNetworkShortcut' -Times 1
         } else {
             $results.Count | Should Be 3
-            ($results | Where-Object Step -eq 'NetworkAdapterEtat').Severity | Should Be 'INFO'
+            ($results | Where-Object Step -eq 'NetworkAdapterStatus').Severity | Should Be 'INFO'
             ($results | Where-Object Step -eq 'NetworkPing8888').Severity | Should Be 'INFO'
             ($results | Where-Object Step -eq 'RefreshNetworkPlaces').Severity | Should Be 'INFO'
             Assert-MockCalled 'Invoke-WcdNetworkShortcut' 1
@@ -79,7 +79,7 @@ Describe 'Config-Network' {
         Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
         $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
-        $adapterResult = $results | Where-Object Step -eq 'NetworkAdapterEtat'
+        $adapterResult = $results | Where-Object Step -eq 'NetworkAdapterStatus'
         $pingResult = $results | Where-Object Step -eq 'NetworkPing8888'
 
         if ($script:PesterMajorVersion -ge 5) {
@@ -179,7 +179,7 @@ Describe 'Config-Network' {
         Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
         $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
-        $adapterResult = $results | Where-Object Step -eq 'NetworkAdapterEtat'
+        $adapterResult = $results | Where-Object Step -eq 'NetworkAdapterStatus'
         $pingResult = $results | Where-Object Step -eq 'NetworkPing8888'
 
         if ($script:PesterMajorVersion -ge 5) {

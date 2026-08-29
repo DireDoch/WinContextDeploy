@@ -17,7 +17,7 @@
 
 .OUTPUTS
     [pscustomobject[]] — tableau de resultats avec Step, Success, Severity, Error.
-    Etapes possibles: NetworkAdapterEtat, NetworkPing8888, RefreshNetworkPlaces.
+    Etapes possibles: NetworkAdapterStatus, NetworkPing8888, RefreshNetworkPlaces.
 #>
 
 function Get-WcdNetworkAdapters {
@@ -254,9 +254,9 @@ function Set-WcdNetworkDiagnostics {
 
         if ($activeAdapters.Count -gt 0) {
             $summary = Format-WcdNetworkAdapterSummary -Adapters $activeAdapters
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: adaptateurs actifs detectes: {0}' -f $summary)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: active adapters detected: {0}' -f $summary)
             $results += [pscustomobject]@{
-                Step     = 'NetworkAdapterEtat'
+                Step     = 'NetworkAdapterStatus'
                 Success  = $true
                 Severity = 'INFO'
                 Error    = ''
@@ -267,9 +267,9 @@ function Set-WcdNetworkDiagnostics {
                 $message = '{0} Adaptateurs vus: {1}' -f $message, (Format-WcdNetworkAdapterSummary -Adapters $adapters)
             }
 
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
-                Step     = 'NetworkAdapterEtat'
+                Step     = 'NetworkAdapterStatus'
                 Success  = $true
                 Severity = 'WARNING'
                 Error    = $message
@@ -280,7 +280,7 @@ function Set-WcdNetworkDiagnostics {
         $message = 'Impossible d inventorier les adaptateurs reseau: {0}' -f $_.Exception.Message
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
         $results += [pscustomobject]@{
-            Step     = 'NetworkAdapterEtat'
+            Step     = 'NetworkAdapterStatus'
             Success  = $false
             Severity = 'ERROR'
             Error    = $message
@@ -311,7 +311,7 @@ function Set-WcdNetworkDiagnostics {
 
         if ($null -eq $wifiAdapter) {
             $message = 'Adaptateur Wi-Fi (802.11) non detecte sur ce poste. Ping Wi-Fi ignore.'
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkPing8888'
                 Success  = $true
@@ -321,7 +321,7 @@ function Set-WcdNetworkDiagnostics {
         } elseif (-not (Test-WcdNetworkAdapterActive -Adapter $wifiAdapter)) {
             $wifiName = if (-not [string]::IsNullOrWhiteSpace($wifiAdapter.InterfaceDescription)) { $wifiAdapter.InterfaceDescription } else { $wifiAdapter.Name }
             $message = 'Adaptateur Wi-Fi detecte ({0}) mais non actif (Status: {1}). Ping Wi-Fi ignore.' -f $wifiName, $wifiAdapter.Status
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkPing8888'
                 Success  = $true
@@ -334,7 +334,7 @@ function Set-WcdNetworkDiagnostics {
 
             if ([string]::IsNullOrWhiteSpace($wifiIPv4)) {
                 $message = 'Adaptateur Wi-Fi actif ({0}) mais aucune adresse IPv4 attribuee. Ping Wi-Fi ignore.' -f $wifiName
-                Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+                Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
                 $results += [pscustomobject]@{
                     Step     = 'NetworkPing8888'
                     Success  = $true
@@ -350,7 +350,7 @@ function Set-WcdNetworkDiagnostics {
                             $detail = ' ({0})' -f $pingResult.Detail
                         }
 
-                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: ping 8.8.8.8 via Wi-Fi ({0}, source {1}) reussi{2}.' -f $wifiName, $wifiIPv4, $detail)
+                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: ping 8.8.8.8 over Wi-Fi ({0}, source {1}) succeeded{2}.' -f $wifiName, $wifiIPv4, $detail)
                         $results += [pscustomobject]@{
                             Step     = 'NetworkPing8888'
                             Success  = $true
@@ -359,7 +359,7 @@ function Set-WcdNetworkDiagnostics {
                         }
                     } else {
                         $message = 'Le ping vers 8.8.8.8 via Wi-Fi ({0}, source {1}) a echoue.' -f $wifiName, $wifiIPv4
-                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
                         $results += [pscustomobject]@{
                             Step     = 'NetworkPing8888'
                             Success  = $true
@@ -385,7 +385,7 @@ function Set-WcdNetworkDiagnostics {
         $shortcutPath = Get-WcdRefreshNetworkPlacesShortcutPath
         if ([string]::IsNullOrWhiteSpace($shortcutPath)) {
             $message = 'Refresh My Network Places introuvable dans les raccourcis reseau de l utilisateur.'
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'RefreshNetworkPlaces'
                 Success  = $true
@@ -394,7 +394,7 @@ function Set-WcdNetworkDiagnostics {
             }
         } else {
             Invoke-WcdNetworkShortcut -Path $shortcutPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: Refresh My Network Places active via {0}.' -f $shortcutPath)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: Refresh My Network Places triggered via {0}.' -f $shortcutPath)
             $results += [pscustomobject]@{
                 Step     = 'RefreshNetworkPlaces'
                 Success  = $true

@@ -28,12 +28,12 @@ Describe 'Config-DeviceManager' {
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeTrue
             $result.Severity | Should -Be 'INFO'
-            $result.Step | Should -Be 'DeviceManagerEtat'
+            $result.Step | Should -Be 'DeviceManagerStatus'
             $result.Error | Should -Be ''
         } else {
             $result.Success | Should Be $true
             $result.Severity | Should Be 'INFO'
-            $result.Step | Should Be 'DeviceManagerEtat'
+            $result.Step | Should Be 'DeviceManagerStatus'
             $result.Error | Should Be ''
         }
     }

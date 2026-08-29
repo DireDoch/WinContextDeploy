@@ -70,15 +70,15 @@ function Set-WcdUsageConfiguration {
         }
 
         try {
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Start'
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'VdiWorkspace' -Event 'Start'
             Open-WcdUrl -Url $citrixUrl
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Usage: poste secondaire, page Citrix ouverte.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'UsageCitrix'; Success = $true; Error = '' }
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Environment: VDI endpoint, workspace download page opened.'
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'VdiWorkspace' -Event 'Finish' -Kind 'success'
+            $results += [pscustomobject]@{ Step = 'VdiWorkspace'; Success = $true; Error = '' }
         } catch {
-            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Usage Citrix: {0}' -f $_.Exception.Message)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Finish' -Kind 'error'
-            $results += [pscustomobject]@{ Step = 'UsageCitrix'; Success = $false; Error = $_.Exception.Message }
+            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('VDI workspace: {0}' -f $_.Exception.Message)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'VdiWorkspace' -Event 'Finish' -Kind 'error'
+            $results += [pscustomobject]@{ Step = 'VdiWorkspace'; Success = $false; Error = $_.Exception.Message }
         }
 
         return $results
@@ -94,16 +94,16 @@ function Set-WcdUsageConfiguration {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Start'
         if (Test-Path -LiteralPath $sapPath) {
             Open-WcdExplorer -FolderPath $sapPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'SAP: dossier ouvert dans l explorateur.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'ERP client: folder opened in Explorer.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'SAPFrontEnd'; Success = $true; Error = '' }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'SAP: dossier introuvable, avertissement.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'ERP client: folder not found.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'warning'
             $results += [pscustomobject]@{ Step = 'SAPFrontEnd'; Success = $true; Error = 'SAP Front End introuvable sur ce poste.'; Severity = 'WARNING' }
         }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('SAP: {0}' -f $_.Exception.Message)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('ERP client: {0}' -f $_.Exception.Message)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'SAPFrontEnd'; Success = $false; Error = $_.Exception.Message }
     }

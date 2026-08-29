@@ -22,26 +22,26 @@ Describe 'Config-Power' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 5
-            ($results | Where-Object Step -eq 'EcranBatterie10min').Success | Should -BeTrue
-            ($results | Where-Object Step -eq 'EcranSecteur15min').Success | Should -BeTrue
-            ($results | Where-Object Step -eq 'CapotSecteurNeRienFaire').Success | Should -BeTrue
-            ($results | Where-Object Step -eq 'CapotBatterieNeRienFaire').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'ScreenTimeoutBattery').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'ScreenTimeoutAc').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'LidActionAcNone').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'LidActionBatteryNone').Success | Should -BeTrue
             ($results | Where-Object Step -eq 'SetActiveSchemeCurrent').Success | Should -BeTrue
-            Get-Content -Path $logPath -Raw | Should -Match 'ecran batterie 10 min'
-            Get-Content -Path $logPath -Raw | Should -Match 'fermeture capot secteur ne rien faire'
-            Get-Content -Path $logPath -Raw | Should -Match 'fermeture capot batterie ne rien faire'
-            Get-Content -Path $logPath -Raw | Should -Match 'profil actif applique'
+            Get-Content -Path $logPath -Raw | Should -Match 'screen timeout on battery set to 10 min'
+            Get-Content -Path $logPath -Raw | Should -Match 'lid close on AC set to do nothing'
+            Get-Content -Path $logPath -Raw | Should -Match 'lid close on battery set to do nothing'
+            Get-Content -Path $logPath -Raw | Should -Match 'active scheme applied'
         } else {
             $results.Count | Should Be 5
-            ($results | Where-Object Step -eq 'EcranBatterie10min').Success | Should Be $true
-            ($results | Where-Object Step -eq 'EcranSecteur15min').Success | Should Be $true
-            ($results | Where-Object Step -eq 'CapotSecteurNeRienFaire').Success | Should Be $true
-            ($results | Where-Object Step -eq 'CapotBatterieNeRienFaire').Success | Should Be $true
+            ($results | Where-Object Step -eq 'ScreenTimeoutBattery').Success | Should Be $true
+            ($results | Where-Object Step -eq 'ScreenTimeoutAc').Success | Should Be $true
+            ($results | Where-Object Step -eq 'LidActionAcNone').Success | Should Be $true
+            ($results | Where-Object Step -eq 'LidActionBatteryNone').Success | Should Be $true
             ($results | Where-Object Step -eq 'SetActiveSchemeCurrent').Success | Should Be $true
-            Get-Content -Path $logPath -Raw | Should Match 'ecran batterie 10 min'
-            Get-Content -Path $logPath -Raw | Should Match 'fermeture capot secteur ne rien faire'
-            Get-Content -Path $logPath -Raw | Should Match 'fermeture capot batterie ne rien faire'
-            Get-Content -Path $logPath -Raw | Should Match 'profil actif applique'
+            Get-Content -Path $logPath -Raw | Should Match 'screen timeout on battery set to 10 min'
+            Get-Content -Path $logPath -Raw | Should Match 'lid close on AC set to do nothing'
+            Get-Content -Path $logPath -Raw | Should Match 'lid close on battery set to do nothing'
+            Get-Content -Path $logPath -Raw | Should Match 'active scheme applied'
         }
     }
 
@@ -54,16 +54,16 @@ Describe 'Config-Power' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
-            ($results | Where-Object Step -eq 'EcranBatterie10min') | Should -BeNullOrEmpty
-            ($results | Where-Object Step -eq 'VeillePCBatterieJamais') | Should -BeNullOrEmpty
-            ($results | Where-Object Step -eq 'CapotSecteurNeRienFaire') | Should -BeNullOrEmpty
-            ($results | Where-Object Step -eq 'CapotBatterieNeRienFaire') | Should -BeNullOrEmpty
+            ($results | Where-Object Step -eq 'ScreenTimeoutBattery') | Should -BeNullOrEmpty
+            ($results | Where-Object Step -eq 'SleepBatteryNever') | Should -BeNullOrEmpty
+            ($results | Where-Object Step -eq 'LidActionAcNone') | Should -BeNullOrEmpty
+            ($results | Where-Object Step -eq 'LidActionBatteryNone') | Should -BeNullOrEmpty
         } else {
             $results.Count | Should Be 2
-            ($results | Where-Object Step -eq 'EcranBatterie10min') | Should BeNullOrEmpty
-            ($results | Where-Object Step -eq 'VeillePCBatterieJamais') | Should BeNullOrEmpty
-            ($results | Where-Object Step -eq 'CapotSecteurNeRienFaire') | Should BeNullOrEmpty
-            ($results | Where-Object Step -eq 'CapotBatterieNeRienFaire') | Should BeNullOrEmpty
+            ($results | Where-Object Step -eq 'ScreenTimeoutBattery') | Should BeNullOrEmpty
+            ($results | Where-Object Step -eq 'SleepBatteryNever') | Should BeNullOrEmpty
+            ($results | Where-Object Step -eq 'LidActionAcNone') | Should BeNullOrEmpty
+            ($results | Where-Object Step -eq 'LidActionBatteryNone') | Should BeNullOrEmpty
         }
     }
 

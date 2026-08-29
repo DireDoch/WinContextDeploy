@@ -68,14 +68,14 @@ function Set-WcdApplicationsConfiguration {
     $moduleName = 'Config-Applications'
 
     if (-not $OpenApps) {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: ouverture refusee par l utilisateur (type: $Environment)."
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: opening declined by the technician (environment: $Environment)."
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ApplicationsSkip' -Event 'Start'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ApplicationsSkip' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'ApplicationsSkip'; Success = $true; Error = ''; Severity = 'INFO' }
         return $results
     }
 
-    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: ouverture des liens de configuration (type: $Environment)."
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: opening configuration targets (environment: $Environment)."
 
     $apps = $null
     if ($null -ne $Config) { $apps = $Config.Applications }
@@ -89,13 +89,13 @@ function Set-WcdApplicationsConfiguration {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Start'
         if (Test-Path -LiteralPath $scPath) {
             Open-WcdApplication -Path $scPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Software Center ouvert.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Software Center opened.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'AppSoftwareCenter'; Success = $true; Error = '' }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Software Center introuvable.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Software Center not found.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppSoftwareCenter'; Success = $true; Error = 'Software Center introuvable.'; Severity = 'WARNING' }
+            $results += [pscustomobject]@{ Step = 'AppSoftwareCenter'; Success = $true; Error = 'Software Center not found.'; Severity = 'WARNING' }
         }
     } catch {
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Software Center: {0}' -f $_.Exception.Message)
@@ -112,13 +112,13 @@ function Set-WcdApplicationsConfiguration {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Start'
         if (Test-Path -LiteralPath $outlookPath) {
             Open-WcdApplication -Path $outlookPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outlook ouvert.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outlook opened.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'AppOutlook'; Success = $true; Error = '' }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outlook introuvable.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outlook not found.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppOutlook'; Success = $true; Error = 'Outlook introuvable.'; Severity = 'WARNING' }
+            $results += [pscustomobject]@{ Step = 'AppOutlook'; Success = $true; Error = 'Outlook not found.'; Severity = 'WARNING' }
         }
     } catch {
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Outlook: {0}' -f $_.Exception.Message)
@@ -135,13 +135,13 @@ function Set-WcdApplicationsConfiguration {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Start'
         if (Test-Path -LiteralPath $chromePath) {
             Open-WcdApplication -Path $chromePath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Chrome ouvert.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Chrome opened.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'AppChrome'; Success = $true; Error = '' }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Chrome introuvable.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Chrome not found.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppChrome'; Success = $true; Error = 'Chrome introuvable.'; Severity = 'WARNING' }
+            $results += [pscustomobject]@{ Step = 'AppChrome'; Success = $true; Error = 'Chrome not found.'; Severity = 'WARNING' }
         }
     } catch {
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Chrome: {0}' -f $_.Exception.Message)
@@ -157,13 +157,13 @@ function Set-WcdApplicationsConfiguration {
     try {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppTeams' -Event 'Start'
         Start-Process $teamsExe -ErrorAction Stop
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Teams ouvert.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Teams opened.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppTeams' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'AppTeams'; Success = $true; Error = '' }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Teams introuvable.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Teams not found.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppTeams' -Event 'Finish' -Kind 'warning'
-        $results += [pscustomobject]@{ Step = 'AppTeams'; Success = $true; Error = 'Teams introuvable.'; Severity = 'WARNING' }
+        $results += [pscustomobject]@{ Step = 'AppTeams'; Success = $true; Error = 'Teams not found.'; Severity = 'WARNING' }
     }
 
     # 5. Snip-it (Outil Capture) — lancement direct via snippingtool
@@ -174,13 +174,13 @@ function Set-WcdApplicationsConfiguration {
     try {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSnipIt' -Event 'Start'
         Start-Process $snipExe -ErrorAction Stop
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outil Capture ouvert.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Snipping Tool opened.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSnipIt' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'AppSnipIt'; Success = $true; Error = '' }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outil Capture introuvable.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Snipping Tool not found.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSnipIt' -Event 'Finish' -Kind 'warning'
-        $results += [pscustomobject]@{ Step = 'AppSnipIt'; Success = $true; Error = 'Outil Capture introuvable.'; Severity = 'WARNING' }
+        $results += [pscustomobject]@{ Step = 'AppSnipIt'; Success = $true; Error = 'Snipping Tool not found.'; Severity = 'WARNING' }
     }
 
     # 6. GlobalProtect — verification par nom de processus dans le gestionnaire des taches
@@ -200,16 +200,16 @@ function Set-WcdApplicationsConfiguration {
             }
         }
         if ($gpFound) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'GlobalProtect actif (PanGPA en cours d execution).'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'VPN client running.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $true; Error = '' }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'GlobalProtect non detecte (PanGPA absent des processus actifs).'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'VPN client not detected among running processes.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $true; Error = 'GlobalProtect non detecte (PanGPA absent des processus actifs).'; Severity = 'WARNING' }
+            $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $true; Error = 'VPN client not detected among running processes.'; Severity = 'WARNING' }
         }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('GlobalProtect: {0}' -f $_.Exception.Message)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('VPN client: {0}' -f $_.Exception.Message)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $false; Error = $_.Exception.Message }
     }
@@ -223,16 +223,16 @@ function Set-WcdApplicationsConfiguration {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Start'
         if (Test-Path -LiteralPath $mfPath) {
             Open-WcdInExplorer -FolderPath $mfPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Micro Focus: dossier ouvert dans l explorateur.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Terminal emulator: folder opened in Explorer.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'AppMicroFocus'; Success = $true; Error = '' }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Micro Focus: non present, etape ignoree.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Terminal emulator: not present, step skipped.'
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'AppMicroFocus'; Success = $true; Error = ''; Severity = 'INFO' }
         }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Micro Focus: {0}' -f $_.Exception.Message)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Terminal emulator: {0}' -f $_.Exception.Message)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'AppMicroFocus'; Success = $false; Error = $_.Exception.Message }
     }
@@ -245,11 +245,11 @@ function Set-WcdApplicationsConfiguration {
     try {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppServiceNow' -Event 'Start'
         Open-WcdApplication -Path $snUrl
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'ServiceNow My IT Support ouvert.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Helpdesk portal opened.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppServiceNow' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'AppServiceNow'; Success = $true; Error = '' }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('ServiceNow: {0}' -f $_.Exception.Message)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Helpdesk portal: {0}' -f $_.Exception.Message)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppServiceNow' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'AppServiceNow'; Success = $false; Error = $_.Exception.Message }
     }

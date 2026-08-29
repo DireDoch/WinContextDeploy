@@ -29,20 +29,20 @@ Describe 'Config-Language' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
-            ($results | Where-Object Step -eq 'LangueWindows').Success | Should -BeTrue
-            ($results | Where-Object Step -eq 'ClavierWindows').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'DisplayLanguage').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'KeyboardLayout').Success | Should -BeTrue
             Assert-MockCalled -CommandName 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'fr-CA' -and $GeoId -eq 39 }
-            Get-Content -Path $logPath -Raw | Should -Match 'Langue: fr-CA appliquee'
-            Get-Content -Path $logPath -Raw | Should -Match 'deconnexion/reconnexion'
-            Get-Content -Path $logPath -Raw | Should -Match 'Clavier: Canadien francais \(QWERTY\) applique'
+            Get-Content -Path $logPath -Raw | Should -Match 'Display language: fr-CA applied'
+            Get-Content -Path $logPath -Raw | Should -Match 'sign-out and sign-in'
+            Get-Content -Path $logPath -Raw | Should -Match 'Keyboard: Canadian French \(QWERTY\) applied'
         } else {
             $results.Count | Should Be 2
-            ($results | Where-Object Step -eq 'LangueWindows').Success | Should Be $true
-            ($results | Where-Object Step -eq 'ClavierWindows').Success | Should Be $true
+            ($results | Where-Object Step -eq 'DisplayLanguage').Success | Should Be $true
+            ($results | Where-Object Step -eq 'KeyboardLayout').Success | Should Be $true
             Assert-MockCalled 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'fr-CA' -and $GeoId -eq 39 }
-            Get-Content -Path $logPath -Raw | Should Match 'Langue: fr-CA appliquee'
-            Get-Content -Path $logPath -Raw | Should Match 'deconnexion/reconnexion'
-            Get-Content -Path $logPath -Raw | Should Match 'Clavier: Canadien francais \(QWERTY\) applique'
+            Get-Content -Path $logPath -Raw | Should Match 'Display language: fr-CA applied'
+            Get-Content -Path $logPath -Raw | Should Match 'sign-out and sign-in'
+            Get-Content -Path $logPath -Raw | Should Match 'Keyboard: Canadian French \(QWERTY\) applied'
         }
     }
 
@@ -62,18 +62,18 @@ Describe 'Config-Language' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
-            ($results | Where-Object Step -eq 'LangueWindows').Success | Should -BeTrue
-            ($results | Where-Object Step -eq 'ClavierWindows').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'DisplayLanguage').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'KeyboardLayout').Success | Should -BeTrue
             Assert-MockCalled -CommandName 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'en-US' -and $GeoId -eq 244 }
-            Get-Content -Path $logPath -Raw | Should -Match 'Langue: en-US appliquee'
-            Get-Content -Path $logPath -Raw | Should -Match 'Clavier: Anglais \(Etats-Unis\) applique'
+            Get-Content -Path $logPath -Raw | Should -Match 'Display language: en-US applied'
+            Get-Content -Path $logPath -Raw | Should -Match 'Keyboard: English \(United States\) applied'
         } else {
             $results.Count | Should Be 2
-            ($results | Where-Object Step -eq 'LangueWindows').Success | Should Be $true
-            ($results | Where-Object Step -eq 'ClavierWindows').Success | Should Be $true
+            ($results | Where-Object Step -eq 'DisplayLanguage').Success | Should Be $true
+            ($results | Where-Object Step -eq 'KeyboardLayout').Success | Should Be $true
             Assert-MockCalled 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'en-US' -and $GeoId -eq 244 }
-            Get-Content -Path $logPath -Raw | Should Match 'Langue: en-US appliquee'
-            Get-Content -Path $logPath -Raw | Should Match 'Clavier: Anglais \(Etats-Unis\) applique'
+            Get-Content -Path $logPath -Raw | Should Match 'Display language: en-US applied'
+            Get-Content -Path $logPath -Raw | Should Match 'Keyboard: English \(United States\) applied'
         }
     }
 
@@ -87,12 +87,12 @@ Describe 'Config-Language' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
-            ($results | Where-Object Step -eq 'LangueWindows').Success | Should -BeFalse
-            ($results | Where-Object Step -eq 'ClavierWindows').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'DisplayLanguage').Success | Should -BeFalse
+            ($results | Where-Object Step -eq 'KeyboardLayout').Success | Should -BeTrue
         } else {
             $results.Count | Should Be 2
-            ($results | Where-Object Step -eq 'LangueWindows').Success | Should Be $false
-            ($results | Where-Object Step -eq 'ClavierWindows').Success | Should Be $true
+            ($results | Where-Object Step -eq 'DisplayLanguage').Success | Should Be $false
+            ($results | Where-Object Step -eq 'KeyboardLayout').Success | Should Be $true
         }
     }
 

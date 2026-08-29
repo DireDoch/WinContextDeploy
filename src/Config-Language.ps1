@@ -41,7 +41,7 @@ function Get-WcdLanguageProfile {
                 GeoId           = 39
                 KeyboardTip     = '0C0C:00001009'
                 LanguageLabel   = 'fr-CA'
-                KeyboardLabel   = 'Canadien francais (QWERTY)'
+                KeyboardLabel   = 'Canadian French (QWERTY)'
             }
         }
         'en-US' {
@@ -51,7 +51,7 @@ function Get-WcdLanguageProfile {
                 GeoId           = 244
                 KeyboardTip     = '0409:00000409'
                 LanguageLabel   = 'en-US'
-                KeyboardLabel   = 'Anglais (Etats-Unis)'
+                KeyboardLabel   = 'English (United States)'
             }
         }
     }
@@ -137,14 +137,14 @@ function Set-WcdLocaleOverrides {
     if ($setUiLanguageCommand) {
         Set-WinUILanguageOverride -Language $Culture -ErrorAction Stop -WarningAction SilentlyContinue
     } else {
-        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinUILanguageOverride indisponible: override UI non applique.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinUILanguageOverride unavailable: UI override not applied.'
     }
 
     $setCultureCommand = Get-Command -Name 'Set-Culture' -ErrorAction SilentlyContinue
     if ($setCultureCommand) {
         Set-Culture -CultureInfo $Culture -ErrorAction Stop
     } else {
-        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-Culture indisponible: culture utilisateur non appliquee.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-Culture unavailable: user culture not applied.'
     }
 
     $setSystemLocaleCommand = Get-Command -Name 'Set-WinSystemLocale' -ErrorAction SilentlyContinue
@@ -155,7 +155,7 @@ function Set-WcdLocaleOverrides {
             Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinSystemLocale non applique ({0}). Executer en administrateur si necessaire.' -f $_.Exception.Message)
         }
     } else {
-        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinSystemLocale indisponible: locale systeme non appliquee.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinSystemLocale unavailable: system locale not applied.'
     }
 
     $setHomeLocationCommand = Get-Command -Name 'Set-WinHomeLocation' -ErrorAction SilentlyContinue
@@ -166,7 +166,7 @@ function Set-WcdLocaleOverrides {
             Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinHomeLocation non applique ({0}).' -f $_.Exception.Message)
         }
     } else {
-        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinHomeLocation indisponible: region non appliquee.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinHomeLocation unavailable: region not applied.'
     }
 }
 
@@ -185,7 +185,7 @@ function Set-WcdLanguageConfiguration {
     $moduleName = 'Config-Language'
 
     try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisplayLanguage' -Event 'Start'
         $languageList = New-WcdLanguageList -Culture $profile.Culture -FallbackCultures $profile.FallbackCultures
         if ($languageList.Count -gt 0 -and $null -ne $languageList[0].PSObject.Properties['InputMethodTips']) {
             $languageList[0].InputMethodTips.Clear()
@@ -194,26 +194,26 @@ function Set-WcdLanguageConfiguration {
 
         Set-WcdLanguageList -LanguageList $languageList
         Set-WcdLocaleOverrides -Culture $profile.Culture -GeoId $profile.GeoId -LogPath $resolvedLogPath
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Langue: {0} appliquee.' -f $profile.LanguageLabel)
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Certaines applications UWP peuvent necessiter une deconnexion/reconnexion pour afficher la nouvelle langue.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'LangueWindows'; Success = $true; Error = '' }
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Display language: {0} applied.' -f $profile.LanguageLabel)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Some UWP apps may need a sign-out and sign-in before the new language shows.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisplayLanguage' -Event 'Finish' -Kind 'success'
+        $results += [pscustomobject]@{ Step = 'DisplayLanguage'; Success = $true; Error = '' }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Langue Windows: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'LangueWindows'; Success = $false; Error = $_.Exception.Message }
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Display language: {0}' -f $_.Exception.Message)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisplayLanguage' -Event 'Finish' -Kind 'error'
+        $results += [pscustomobject]@{ Step = 'DisplayLanguage'; Success = $false; Error = $_.Exception.Message }
     }
 
     try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'KeyboardLayout' -Event 'Start'
         Set-WcdKeyboardOverride -InputTip $profile.KeyboardTip
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Clavier: {0} applique.' -f $profile.KeyboardLabel)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'ClavierWindows'; Success = $true; Error = '' }
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Keyboard: {0} applied.' -f $profile.KeyboardLabel)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'KeyboardLayout' -Event 'Finish' -Kind 'success'
+        $results += [pscustomobject]@{ Step = 'KeyboardLayout'; Success = $true; Error = '' }
     } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Clavier Windows: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'ClavierWindows'; Success = $false; Error = $_.Exception.Message }
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Keyboard: {0}' -f $_.Exception.Message)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'KeyboardLayout' -Event 'Finish' -Kind 'error'
+        $results += [pscustomobject]@{ Step = 'KeyboardLayout'; Success = $false; Error = $_.Exception.Message }
     }
 
     return $results

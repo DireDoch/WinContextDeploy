@@ -22,8 +22,8 @@ Describe 'Config-Decimal' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeTrue
-            $result.Step | Should -Be 'DecimalEtMonetaire'
-            Get-Content -Path $logPath -Raw | Should -Match 'symboles numeriques et monetaires forces a un point'
+            $result.Step | Should -Be 'DecimalAndCurrency'
+            Get-Content -Path $logPath -Raw | Should -Match 'decimal and currency separators forced to a period'
             Assert-MockCalled -CommandName 'Set-WcdRegistryValue' -Times 5
             Assert-MockCalled -CommandName 'Set-WcdRegistryValue' -Times 1 -ParameterFilter { $Path -eq 'HKCU:\Control Panel\International' -and $Name -eq 'sDecimal' -and $Value -eq '.' }
             Assert-MockCalled -CommandName 'Set-WcdRegistryValue' -Times 1 -ParameterFilter { $Path -eq 'HKCU:\Control Panel\International' -and $Name -eq 'sThousandSep' -and $Value -eq ',' }
@@ -32,8 +32,8 @@ Describe 'Config-Decimal' {
             Assert-MockCalled -CommandName 'Set-WcdRegistryValue' -Times 1 -ParameterFilter { $Path -eq 'HKCU:\Control Panel\International' -and $Name -eq 'sMonThousandSep' -and $Value -eq ',' }
         } else {
             $result.Success | Should Be $true
-            $result.Step | Should Be 'DecimalEtMonetaire'
-            Get-Content -Path $logPath -Raw | Should Match 'symboles numeriques et monetaires forces a un point'
+            $result.Step | Should Be 'DecimalAndCurrency'
+            Get-Content -Path $logPath -Raw | Should Match 'decimal and currency separators forced to a period'
             Assert-MockCalled 'Set-WcdRegistryValue' 5
         }
     }
@@ -48,7 +48,7 @@ Describe 'Config-Decimal' {
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeFalse
             $result.Error | Should -Match 'GPO|acces refuse'
-            Get-Content -Path $logPath -Raw | Should -Match 'Decimales'
+            Get-Content -Path $logPath -Raw | Should -Match 'Regional'
         } else {
             $result.Success | Should Be $false
             $result.Error | Should Match 'GPO|acces refuse'
