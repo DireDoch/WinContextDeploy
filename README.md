@@ -35,6 +35,9 @@ left/right arrow keys to change a choice and Enter to confirm.
 | Open configuration applications | Yes / No | Yes |
 | Engineer workstation | Yes / No | No |
 
+The last prompt appears only when the manifest declares at least one `Prompt`
+entry.
+
 Form factor selects the power profile — battery and lid-close settings apply to
 laptops only. Environment selects which applications are relevant: a `Vdi`
 endpoint skips the locally installed line-of-business checks, since those live in
@@ -54,10 +57,41 @@ powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 `
 
 ## Configuration
 
-All environment-specific paths and URLs live in `WinContextDeploy.psd1`. Edit
-that file rather than the scripts — application shortcuts, portal URLs, and
-process names are all resolved from it at runtime, with sensible fallbacks when a
-key is absent.
+Everything environment-specific lives in `WinContextDeploy.psd1`. Adding,
+removing or reordering an application is a manifest edit — no code changes.
+
+Each entry in `Applications` declares what to do and what to do it to:
+
+```powershell
+@{
+    Step        = 'AppErpClient'      # stable id, used in logs and reports
+    Name        = 'ERP client'        # what the technician sees
+    Action      = 'OpenFolder'        # see table below
+    Target      = 'C:\ProgramData\...\SAP Front End'
+    Environment = 'Workstation'       # optional: 'Workstation' or 'Vdi'
+    FormFactor  = 'Laptop'            # optional: 'Laptop' or 'Desktop'
+    Optional    = $true               # absent -> note, not a warning
+    Prompt      = $true               # offer in the optional tools menu
+}
+```
+
+| Action | Effect |
+|---|---|
+| `Launch` | Starts an application (`.lnk`, `.exe`, or a command on `PATH`) |
+| `OpenFolder` | Opens a folder in Explorer |
+| `OpenUrl` | Opens a URL in the default browser |
+| `CheckProcess` | Verifies a process is running; `Target` is an array of names |
+| `CheckPath` | Verifies a path exists; launches nothing |
+
+`Environment` and `FormFactor` filter an entry to matching machines. A filtered-out
+target is reported **Not Applicable** in the checklist rather than omitted, so the
+technician can see it was considered.
+
+`Prompt = $true` keeps an entry out of the automatic run and offers it in the
+optional-tools menu instead — for the extras an engineering or CAD workstation
+needs that a standard desk does not.
+
+`Printers` lists shared print-server queues to connect. Leave it empty to skip.
 
 ## Branding
 

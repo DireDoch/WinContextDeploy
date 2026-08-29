@@ -26,7 +26,7 @@ param(
 
     [switch]$OpenApps,
 
-    [string]$EngineerType,
+    [string]$OptionalTools,
 
     [string]$HistoryLogPath,
 
@@ -115,7 +115,6 @@ $T = if ($ScriptUI -eq 'EN') {
         ApplicationManualDetail = 'Launch skipped (answered No). Manual verification required.'
         StandardManualDetail    = 'Must be done manually.'
         SecondaryNA             = 'Not applicable on secondary device.'
-        PrimaryNA               = 'Not applicable on primary device.'
         DeskWindowsDetail       = 'Must be done manually on the Windows desktop.'
         StepCount               = 'step(s)'
         ModuleResult            = '  Result: {0} ({1} steps, {2} failures, {3} warnings, {4:N0}ms)'
@@ -132,21 +131,12 @@ $T = if ($ScriptUI -eq 'EN') {
         SectionByStep           = 'FINAL DIAGNOSTIC - BY STEP'
         SummaryLine             = 'Summary: {0} OK, {1} warning(s), {2} error(s), {3} manual, {4} N/A.'
         LogOutput               = 'Full log: {0}'
-        OptionalSoftwareTitle   = '   OPTIONAL SOFTWARE NOT INSTALLED'
-        OptionalSoftwareDesc    = '   These programs are not present on this device.'
-        OptionalSoftwareNote    = 'Not installed on this device (normal depending on profile).'
         AutoExportLog           = 'Automatic log export to: {0}'
         HistoryExported         = 'History added to: {0}'
         HistoryExportFailed     = '[WARNING] History export failed. Local copy preserved. Detail: {0}'
         FatalHelpersMissing     = '[FATAL ERROR] WcdHelpers.ps1 not found in: {0}'
         FatalConfig             = '[FATAL ERROR] {0}'
         FatalLogConflict        = '[FATAL ERROR] -LogPath and -HistoryLogPath must be different.'
-        AS400Warning            = 'Warning: your primary device does not have AS400.'
-        AS400PathNote           = ' Checked path: {0}'
-        AutovueWarning          = 'AutoVue not installed on this device.'
-        AutovuePendingConfig    = 'AutoVue opened. Remaining configuration must be completed manually.'
-        AutovueOpenFailed       = 'AutoVue launch failed. Remaining configuration must be completed manually.'
-        AutovuePathNote         = ' Checked path: {0}'
         DiagStyleInProgress     = 'IN PROGRESS'
         DiagStyleOk             = 'OK'
         DiagStyleWarning        = 'WARNING'
@@ -231,7 +221,6 @@ $T = if ($ScriptUI -eq 'EN') {
         ApplicationManualDetail = 'Ouverture ignoree (repondu Non). Verification manuelle requise.'
         StandardManualDetail    = 'A faire manuellement.'
         SecondaryNA             = 'Non applicable sur poste secondaire.'
-        PrimaryNA               = 'Non applicable sur poste principal.'
         DeskWindowsDetail       = 'A faire manuellement sur le bureau Windows.'
         StepCount               = 'etape(s)'
         ModuleResult            = '  Resultat: {0} ({1} etapes, {2} echecs, {3} avertissements, {4:N0}ms)'
@@ -248,21 +237,12 @@ $T = if ($ScriptUI -eq 'EN') {
         SectionByStep           = 'DIAGNOSTIC FINAL - PAR ETAPE'
         SummaryLine             = 'Resume: {0} OK, {1} warning(s), {2} erreur(s), {3} manuel(le)(s), {4} N/A.'
         LogOutput               = 'Log complet: {0}'
-        OptionalSoftwareTitle   = '   LOGICIELS OPTIONNELS NON INSTALLES'
-        OptionalSoftwareDesc    = '   Ces logiciels ne sont pas presents sur ce poste.'
-        OptionalSoftwareNote    = 'Non installe sur ce poste (normal selon le profil).'
         AutoExportLog           = 'Export automatique des logs vers: {0}'
         HistoryExported         = 'Historique ajoute dans: {0}'
         HistoryExportFailed     = '[AVERTISSEMENT] Export historique impossible. La copie locale est conservee. Detail: {0}'
         FatalHelpersMissing     = '[ERREUR FATALE] WcdHelpers.ps1 introuvable dans: {0}'
         FatalConfig             = '[ERREUR FATALE] {0}'
         FatalLogConflict        = '[ERREUR FATALE] -LogPath et -HistoryLogPath doivent etre differents.'
-        AS400Warning            = "Warning: votre poste principal n a pas AS400."
-        AS400PathNote           = ' Chemin verifie: {0}'
-        AutovueWarning          = 'AutoVue non installe sur ce poste.'
-        AutovuePendingConfig    = 'AutoVue ouvert. La configuration restante doit etre faite manuellement.'
-        AutovueOpenFailed       = 'Echec ouverture AutoVue. La configuration restante doit etre faite manuellement.'
-        AutovuePathNote         = ' Chemin verifie: {0}'
         DiagStyleInProgress     = 'EN COURS'
         DiagStyleOk             = 'OK'
         DiagStyleWarning        = 'WARNING'
@@ -459,7 +439,7 @@ function Read-WcdChoice {
     }
 }
 
-function ConvertTo-WcdEngineerSelections {
+function ConvertTo-WcdOptionalToolSelection {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -482,13 +462,16 @@ function ConvertTo-WcdEngineerSelections {
     return $chars
 }
 
-function Read-WcdEngineerChoice {
+function Read-WcdOptionalToolChoice {
     [CmdletBinding()]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        [object[]]$Candidates
+    )
 
-    $options = [ordered]@{
-        '1' = 'Nvidia'
-        '2' = 'GPS'
+    $options = [ordered]@{}
+    for ($i = 0; $i -lt $Candidates.Count; $i++) {
+        $options[[string]($i + 1)] = [string]$Candidates[$i].Name
     }
 
     Write-Host ''
@@ -510,7 +493,7 @@ function Read-WcdEngineerChoice {
             continue
         }
 
-        $parsed = ConvertTo-WcdEngineerSelections -RawInput $answer -ValidKeys @($options.Keys)
+        $parsed = ConvertTo-WcdOptionalToolSelection -RawInput $answer -ValidKeys @($options.Keys)
         if ($parsed.Count -eq 0) {
             Write-Host ($T.EngineerInvalidChoice -f ($options.Keys -join ', ')) -ForegroundColor Yellow
             continue
@@ -560,7 +543,8 @@ function Resolve-WcdExecutionOptions {
         [string]$SelectedFormFactor,
         [string]$SelectedEnvironment,
         [string]$SelectedOpenApps,
-        [string]$SelectedEngineerType,
+        [string]$SelectedOptionalTools,
+        [object[]]$OptionalToolCandidates = @(),
         [switch]$DisablePrompt
     )
 
@@ -568,7 +552,7 @@ function Resolve-WcdExecutionOptions {
     $deviceResult = $SelectedFormFactor
     $usageResult = $SelectedEnvironment
     $openAppsResult = $SelectedOpenApps
-    $engineerResult = $SelectedEngineerType
+    $engineerResult = $SelectedOptionalTools
 
     $engineerTypes = @()
 
@@ -599,39 +583,35 @@ function Resolve-WcdExecutionOptions {
                 -Description @($T.PromptOpenAppsDesc1, $T.PromptOpenAppsDesc2)
         }
 
-        if (-not $engineerResult) {
+        if (-not $engineerResult -and @($OptionalToolCandidates).Count -gt 0) {
             Write-Host ''
             $engineerYesNo = Read-WcdChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyNo `
                 -Description @($T.PromptEngineerDesc1, $T.PromptEngineerDesc2)
             if ($engineerYesNo -eq 'Yes') {
-                $engineerTypes = Read-WcdEngineerChoice
+                $engineerTypes = Read-WcdOptionalToolChoice -Candidates $OptionalToolCandidates
             } else {
-                $engineerTypes = @('None')
+                $engineerTypes = @()
             }
         }
     }
 
-    # Traitement du parametre CLI -EngineerType (valeurs separees par virgule)
+    # -OptionalTools accepts a comma-separated list of Application Target names.
     if ($engineerTypes.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($engineerResult)) {
-        if ($engineerResult -eq 'None') {
-            $engineerTypes = @('None')
-        } else {
-            $engineerTypes = @($engineerResult -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-        }
+        $engineerTypes = @($engineerResult -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     }
 
     if (-not $languageResult)  { $languageResult  = 'fr-CA' }
     if (-not $deviceResult)    { $deviceResult    = 'Laptop' }
     if (-not $usageResult)     { $usageResult     = 'Workstation' }
     if (-not $openAppsResult)  { $openAppsResult  = 'Yes' }
-    if ($engineerTypes.Count -eq 0) { $engineerTypes = @('None') }
+
 
     return [pscustomobject]@{
         Language      = $languageResult
         FormFactor    = $deviceResult
         Environment   = $usageResult
         OpenApps      = ($openAppsResult -eq 'Yes')
-        EngineerTypes = $engineerTypes
+        OptionalTools = $engineerTypes
     }
 }
 
@@ -653,12 +633,16 @@ if (-not [string]::IsNullOrWhiteSpace($resolvedUsbSourceRoot) -and (Test-Path -L
 
 $openAppsValue = if ($OpenApps) { 'Yes' } else { '' }
 
+# Optional tools are Application Targets flagged Prompt in the manifest.
+$optionalToolCandidates = @(Get-WcdPromptedApplicationTarget -Config $script:WcdConfig)
+
 $executionOptions = Resolve-WcdExecutionOptions `
     -SelectedLanguage $Language `
     -SelectedFormFactor $FormFactor `
     -SelectedEnvironment $Environment `
     -SelectedOpenApps $openAppsValue `
-    -SelectedEngineerType $EngineerType `
+    -SelectedOptionalTools $OptionalTools `
+    -OptionalToolCandidates $optionalToolCandidates `
     -DisablePrompt:$NonInteractive
 
 $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
@@ -679,7 +663,7 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
 
 Initialize-WcdLog -Path $resolvedLogPath
 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message '=== Debut execution WinContextDeploy ==='
-Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | FormFactor: {1} | Environment: {2} | OpenApps: {3} | Engineer: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.FormFactor, $executionOptions.Environment, $executionOptions.OpenApps, ($executionOptions.EngineerTypes -join ','), $resolvedLogPath)
+Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | FormFactor: {1} | Environment: {2} | OpenApps: {3} | OptionalTools: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.FormFactor, $executionOptions.Environment, $executionOptions.OpenApps, ($executionOptions.OptionalTools -join ','), $resolvedLogPath)
 if (-not [string]::IsNullOrWhiteSpace($resolvedLocalProjectRoot)) {
     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("LocalProjectRoot: {0}" -f $resolvedLocalProjectRoot)
 }
@@ -898,137 +882,6 @@ function Write-WcdSectionHeader {
     Write-Host '===============================================' -ForegroundColor Cyan
 }
 
-function Test-WcdEngineerTypeSelected {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions,
-
-        [Parameter(Mandatory)]
-        [string]$EngineerType
-    )
-
-    return (@($ExecutionOptions.EngineerTypes) -contains $EngineerType)
-}
-
-function Get-WcdAS400DiagnosticResult {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions,
-
-        [hashtable]$Config
-    )
-
-    if ($ExecutionOptions.Environment -ne 'Workstation') {
-        return $null
-    }
-
-    $principalConfig = $null
-    if ($null -ne $Config) {
-        $principalConfig = $Config.Principal
-    }
-
-    $configuredPath = ''
-    if ($null -ne $principalConfig -and -not [string]::IsNullOrWhiteSpace($principalConfig.AS400Path)) {
-        $configuredPath = $principalConfig.AS400Path
-    }
-
-    $programsPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs'
-    if ($null -ne $principalConfig -and -not [string]::IsNullOrWhiteSpace($principalConfig.ProgramsPath)) {
-        $programsPath = $principalConfig.ProgramsPath
-    }
-
-    $detectedPath = ''
-    if (-not [string]::IsNullOrWhiteSpace($configuredPath) -and (Test-Path -LiteralPath $configuredPath)) {
-        $detectedPath = $configuredPath
-    }
-
-    if ([string]::IsNullOrWhiteSpace($detectedPath) -and (Test-Path -LiteralPath $programsPath)) {
-        $detectedEntry = Get-ChildItem -LiteralPath $programsPath -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match 'AS\s?400|IBM i Access|Client Access|iSeries' } |
-            Select-Object -First 1
-
-        if ($null -ne $detectedEntry) {
-            $detectedPath = $detectedEntry.FullName
-        }
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($detectedPath)) {
-        return [pscustomobject]@{
-            Step     = 'AS400Presence'
-            Success  = $true
-            Severity = 'INFO'
-            Error    = ''
-            Path     = $detectedPath
-        }
-    }
-
-    $detail = $T.AS400Warning
-    if (-not [string]::IsNullOrWhiteSpace($configuredPath)) {
-        $detail += ($T.AS400PathNote -f $configuredPath)
-    }
-
-    return [pscustomobject]@{
-        Step     = 'AS400Presence'
-        Success  = $true
-        Severity = 'WARNING'
-        Error    = $detail
-        Path     = $configuredPath
-    }
-}
-
-function Get-WcdAutovueDiagnosticResult {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions,
-
-        [hashtable]$Config
-    )
-
-    if ($ExecutionOptions.Environment -ne 'Workstation') {
-        return $null
-    }
-
-    $configuredPath = ''
-    if ($null -ne $Config -and $null -ne $Config.Engineer -and -not [string]::IsNullOrWhiteSpace($Config.Engineer.AutovuePath)) {
-        $configuredPath = $Config.Engineer.AutovuePath
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($configuredPath) -and (Test-Path -LiteralPath $configuredPath)) {
-        try {
-            Start-Process -FilePath $configuredPath -ErrorAction Stop
-            $detail = $T.AutovuePendingConfig
-        } catch {
-            $detail = ($T.AutovueOpenFailed + ' ' + $_.Exception.Message)
-        }
-
-        $detail += ($T.AutovuePathNote -f $configuredPath)
-
-        return [pscustomobject]@{
-            Step     = 'AutovuePresence'
-            Success  = $true
-            Severity = 'WARNING'
-            Error    = $detail
-            Path     = $configuredPath
-        }
-    }
-
-    $detail = $T.AutovueWarning
-    if (-not [string]::IsNullOrWhiteSpace($configuredPath)) {
-        $detail += ($T.AutovuePathNote -f $configuredPath)
-    }
-
-    return [pscustomobject]@{
-        Step     = 'AutovuePresence'
-        Success  = $true
-        Severity = 'WARNING'
-        Error    = $detail
-        Path     = $configuredPath
-    }
-}
-
 function Get-WcdFinalChecklistEntries {
     [CmdletBinding()]
     param(
@@ -1038,120 +891,83 @@ function Get-WcdFinalChecklistEntries {
         [pscustomobject]$ExecutionOptions,
 
         [Parameter(Mandatory)]
-        [hashtable]$StepLabels
+        [hashtable]$StepLabels,
+
+        [hashtable]$Config
     )
 
     $lookup = @{}
     foreach ($result in @($AllResults)) {
-        if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.Step)) {
-            continue
-        }
-
-        if (-not $lookup.ContainsKey($result.Step)) {
-            $lookup[$result.Step] = @()
-        }
+        if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.Step)) { continue }
+        if (-not $lookup.ContainsKey($result.Step)) { $lookup[$result.Step] = @() }
         $lookup[$result.Step] += $result
     }
 
     $entries = @()
     $applicationsSkipped = $lookup.ContainsKey('ApplicationsSkip')
-    $applicationManualDetail = $T.ApplicationManualDetail
-    $standardManualDetail = $T.StandardManualDetail
+
+    # --- OS configuration, in the order the modules run -----------------------
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Taskbar -ResultLookup $lookup `
+        -StepKeys @('TaskbarAlignLeft', 'DisableTaskView') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Language -ResultLookup $lookup `
+        -StepKeys @('DisplayLanguage') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Keyboard -ResultLookup $lookup `
+        -StepKeys @('KeyboardLayout') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Decimal -ResultLookup $lookup `
+        -StepKeys @('DecimalAndCurrency') -StepLabels $StepLabels
+
     $powerStepKeys = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
-        @(
-            'ScreenTimeoutBattery',
-            'ScreenTimeoutAc',
-            'LidActionAcNone',
-            'LidActionBatteryNone',
-            'SetActiveSchemeCurrent'
-        )
+        @('ScreenTimeoutBattery', 'ScreenTimeoutAc', 'LidActionAcNone', 'LidActionBatteryNone', 'SetActiveSchemeCurrent')
     } else {
-        @(
-            'ScreenTimeoutAc',
-            'SetActiveSchemeCurrent'
-        )
+        @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
+    }
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Power -ResultLookup $lookup `
+        -StepKeys $powerStepKeys -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup `
+        -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
+
+    # --- Application Targets, in manifest order -------------------------------
+    # Targets excluded by the current Environment are reported Not Applicable
+    # rather than omitted, so the technician can see they were considered.
+    $selected = @(Get-WcdApplicationTarget -Config $Config `
+        -Environment $ExecutionOptions.Environment `
+        -FormFactor $ExecutionOptions.FormFactor `
+        -OptionalTools $ExecutionOptions.OptionalTools |
+        ForEach-Object { [string]$_.Step })
+
+    foreach ($entry in @($Config.Applications)) {
+        $step = [string]$entry.Step
+        $name = [string]$entry.Name
+
+        if (@($selected) -notcontains $step) {
+            # Prompt entries the technician declined are simply not shown.
+            if ($entry.Prompt) { continue }
+            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'na' -Detail $T.SecondaryNA
+            continue
+        }
+
+        if ($applicationsSkipped) {
+            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'manual' -Detail $T.ApplicationManualDetail
+            continue
+        }
+
+        $entries += Resolve-WcdAutomaticEntry -Label $name -ResultLookup $lookup `
+            -StepKeys @($step) -StepLabels $StepLabels
     }
 
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Taskbar -ResultLookup $lookup -StepKeys @('TaskbarAlignLeft', 'DisableTaskView') -StepLabels $StepLabels
-
-    if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.SoftwareCenter -Kind 'manual' -Detail $applicationManualDetail
-    } else {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.SoftwareCenter -ResultLookup $lookup -StepKeys @('AppSoftwareCenter') -StepLabels $StepLabels
+    # --- Deliberately manual: WinContextDeploy does not automate these --------
+    foreach ($manualLabel in @(
+        $T.Checklist.Signature,
+        $T.Checklist.Wifi,
+        $T.Checklist.NetworkDrives,
+        $T.Checklist.Sync,
+        $T.Checklist.Printers,
+        $T.Checklist.Desktop,
+        $T.Checklist.Favorites
+    )) {
+        $entries += New-WcdDiagnosticEntry -Label $manualLabel -Kind 'manual' -Detail $T.StandardManualDetail
     }
 
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
-
-    if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Outlook -Kind 'manual' -Detail $applicationManualDetail
-    } else {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Outlook -ResultLookup $lookup -StepKeys @('AppOutlook') -StepLabels $StepLabels
-    }
-
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Signature -Kind 'manual' -Detail $standardManualDetail
-
-    if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Vpn -Kind 'manual' -Detail $applicationManualDetail
-    } else {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Vpn -ResultLookup $lookup -StepKeys @('AppGlobalProtect') -StepLabels $StepLabels
-    }
-
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Wifi -Kind 'manual' -Detail $standardManualDetail
-
-    if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Snipping -Kind 'manual' -Detail $applicationManualDetail
-    } else {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Snipping -ResultLookup $lookup -StepKeys @('AppSnipIt') -StepLabels $StepLabels
-    }
-
-    if ($ExecutionOptions.Environment -eq 'Workstation') {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Erp -ResultLookup $lookup -StepKeys @('SAPFrontEnd') -StepLabels $StepLabels
-    } else {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Erp -Kind 'na' -Detail $T.SecondaryNA
-    }
-
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Language -ResultLookup $lookup -StepKeys @('DisplayLanguage') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Keyboard -ResultLookup $lookup -StepKeys @('KeyboardLayout') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Decimal -ResultLookup $lookup -StepKeys @('DecimalAndCurrency') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Power -ResultLookup $lookup -StepKeys $powerStepKeys -StepLabels $StepLabels
-
-    if ($ExecutionOptions.Environment -eq 'Workstation') {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Terminal -ResultLookup $lookup -StepKeys @('AS400Presence') -StepLabels $StepLabels
-    } else {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Terminal -Kind 'na' -Detail $T.SecondaryNA
-    }
-
-    if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Teams -Kind 'manual' -Detail $applicationManualDetail
-    } else {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Teams -ResultLookup $lookup -StepKeys @('AppTeams') -StepLabels $StepLabels
-    }
-
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.NetworkDrives -Kind 'manual' -Detail $standardManualDetail
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Sync -Kind 'manual' -Detail $standardManualDetail
-
-    if ($ExecutionOptions.Environment -eq 'Vdi') {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Vdi -ResultLookup $lookup -StepKeys @('VdiWorkspace') -StepLabels $StepLabels
-    } else {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Vdi -Kind 'na' -Detail $T.PrimaryNA
-    }
-
-    if ($ExecutionOptions.Environment -eq 'Workstation') {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Cad -ResultLookup $lookup -StepKeys @('AutovuePresence') -StepLabels $StepLabels
-    } else {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Cad -Kind 'na' -Detail $T.SecondaryNA
-    }
-
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Printers -Kind 'manual' -Detail $standardManualDetail
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Desktop -Kind 'manual' -Detail $T.DeskWindowsDetail
-
-    if ($applicationsSkipped) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Helpdesk -Kind 'manual' -Detail $applicationManualDetail
-    } else {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Helpdesk -ResultLookup $lookup -StepKeys @('AppServiceNow') -StepLabels $StepLabels
-    }
-
-    $entries += New-WcdDiagnosticEntry -Label $T.Checklist.Favorites -Kind 'manual' -Detail $standardManualDetail
     return $entries
 }
 
@@ -1195,14 +1011,12 @@ $modules = @(
     @{ Name = 'Config-Decimal';       File = 'Config-Decimal.ps1' },
     @{ Name = 'Config-TaskbarLeft';   File = 'Config-TaskbarLeft.ps1' },
     @{ Name = 'Config-Language';      File = 'Config-Language.ps1' },
-    @{ Name = 'Config-Usage';         File = 'Config-Usage.ps1' },
     @{ Name = 'Config-Applications';  File = 'Config-Applications.ps1' },
-    @{ Name = 'Config-Engineer';      File = 'Config-Engineer.ps1' },
     @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' }
 )
 
-$stepLabels = Get-WcdTechnicalStepLabels
-$moduleStepPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions
+$stepLabels = Get-WcdTechnicalStepLabels -Config $script:WcdConfig
+$moduleStepPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $script:WcdConfig
 $allResults = @()
 $moduleStatus = @()
 
@@ -1269,14 +1083,12 @@ foreach ($mod in $modules) {
             'Config-Language' {
                 $modResults = @(Set-WcdLanguageConfiguration -Culture $executionOptions.Language -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
-            'Config-Usage' {
-                $modResults = @(Set-WcdUsageConfiguration -Environment $executionOptions.Environment -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
-            }
             'Config-Applications' {
-                $modResults = @(Set-WcdApplicationsConfiguration -Environment $executionOptions.Environment -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
-            }
-            'Config-Engineer' {
-                $modResults = @(Set-WcdEngineerConfiguration -EngineerTypes $executionOptions.EngineerTypes -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
+                $targets = @(Get-WcdApplicationTarget -Config $script:WcdConfig `
+                    -Environment $executionOptions.Environment `
+                    -FormFactor $executionOptions.FormFactor `
+                    -OptionalTools $executionOptions.OptionalTools)
+                $modResults = @(Set-WcdApplicationsConfiguration -Targets $targets -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-DeviceManager' {
                 $modResults = @(Set-WcdDeviceManagerStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
@@ -1331,49 +1143,7 @@ foreach ($mod in $modules) {
 }
 
 $diagnosticResults = @($allResults)
-$as400Diagnostic = Get-WcdAS400DiagnosticResult -ExecutionOptions $executionOptions -Config $script:WcdConfig
-if ($null -ne $as400Diagnostic) {
-    $diagnosticResults += $as400Diagnostic
-
-    $as400Severity = Get-WcdResultSeverity -Result $as400Diagnostic
-    if ($as400Severity -eq 'WARNING') {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Terminal emulator: {0}' -f $as400Diagnostic.Error)
-    } else {
-        $detectedAs400Path = ''
-        if ($null -ne $as400Diagnostic.PSObject.Properties['Path'] -and -not [string]::IsNullOrWhiteSpace([string]$as400Diagnostic.Path)) {
-            $detectedAs400Path = [string]$as400Diagnostic.Path
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($detectedAs400Path)) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Terminal emulator: present ({0}).' -f $detectedAs400Path)
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Terminal emulator: present.'
-        }
-    }
-}
-
-$autovueDiagnostic = Get-WcdAutovueDiagnosticResult -ExecutionOptions $executionOptions -Config $script:WcdConfig
-if ($null -ne $autovueDiagnostic) {
-    $diagnosticResults += $autovueDiagnostic
-
-    $autovueSeverity = Get-WcdResultSeverity -Result $autovueDiagnostic
-    if ($autovueSeverity -eq 'WARNING') {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('CAD viewer: {0}' -f $autovueDiagnostic.Error)
-    } else {
-        $detectedAutovuePath = ''
-        if ($null -ne $autovueDiagnostic.PSObject.Properties['Path'] -and -not [string]::IsNullOrWhiteSpace([string]$autovueDiagnostic.Path)) {
-            $detectedAutovuePath = [string]$autovueDiagnostic.Path
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($detectedAutovuePath)) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('CAD viewer: present ({0}).' -f $detectedAutovuePath)
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'CAD viewer: present.'
-        }
-    }
-}
-
-$checklistEntries = Get-WcdFinalChecklistEntries -AllResults $diagnosticResults -ExecutionOptions $executionOptions -StepLabels $stepLabels
+$checklistEntries = Get-WcdFinalChecklistEntries -AllResults $diagnosticResults -ExecutionOptions $executionOptions -StepLabels $stepLabels -Config $script:WcdConfig
 $checklistSuccessCount = @($checklistEntries | Where-Object { $_.Kind -eq 'success' }).Count
 $checklistWarningCount = @($checklistEntries | Where-Object { $_.Kind -eq 'warning' }).Count
 $checklistErrorCount = @($checklistEntries | Where-Object { $_.Kind -eq 'error' }).Count
@@ -1409,56 +1179,6 @@ $finalDiagnosticLines = Get-WcdFinalDiagnosticLines -ModuleStatus $moduleStatus 
 Write-Host ''
 Write-Host ($T.LogOutput -f $resolvedLogPath) -ForegroundColor Gray
 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ($T.LogEndSummary -f $checklistSuccessCount, $checklistWarningCount, $checklistErrorCount, $checklistManualCount, $checklistNaCount)
-
-# --- Logiciels optionnels non installes ---
-$optionalSoftware = @()
-
-$sapPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\SAP Front End'
-if ($null -ne $script:WcdConfig -and $null -ne $script:WcdConfig.Principal) {
-    $sapPath = $script:WcdConfig.Principal.SAPPath
-}
-if (-not (Test-Path -LiteralPath $sapPath)) {
-    $optionalSoftware += [pscustomobject]@{
-        Logiciel = 'SAP Front End'
-        Chemin   = $sapPath
-        Note     = $T.OptionalSoftwareNote
-    }
-}
-
-$mfPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Micro Focus'
-if ($null -ne $script:WcdConfig -and $null -ne $script:WcdConfig.Applications) {
-    $mfPath = $script:WcdConfig.Applications.MicroFocus
-}
-if (-not [string]::IsNullOrWhiteSpace($mfPath) -and -not (Test-Path -LiteralPath $mfPath)) {
-    $optionalSoftware += [pscustomobject]@{
-        Logiciel = 'Micro Focus'
-        Chemin   = $mfPath
-        Note     = $T.OptionalSoftwareNote
-    }
-}
-
-$avPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\AutoVue for Windows\AutoVue.lnk'
-if ($null -ne $script:WcdConfig -and $null -ne $script:WcdConfig.Engineer) {
-    if (-not [string]::IsNullOrWhiteSpace($script:WcdConfig.Engineer.AutovuePath)) {
-        $avPath = $script:WcdConfig.Engineer.AutovuePath
-    }
-}
-if (-not [string]::IsNullOrWhiteSpace($avPath) -and -not (Test-Path -LiteralPath $avPath)) {
-    $optionalSoftware += [pscustomobject]@{
-        Logiciel = 'AutoVue'
-        Chemin   = $avPath
-        Note     = $T.OptionalSoftwareNote
-    }
-}
-
-if ($optionalSoftware.Count -gt 0) {
-    Write-Host ''
-    Write-Host '===============================================' -ForegroundColor DarkGray
-    Write-Host $T.OptionalSoftwareTitle -ForegroundColor DarkGray
-    Write-Host '===============================================' -ForegroundColor DarkGray
-    Write-Host $T.OptionalSoftwareDesc -ForegroundColor DarkGray
-    $optionalSoftware | Format-Table -Property Logiciel, Chemin, Note -AutoSize
-}
 
 $finalizationExitCode = 0
 Write-Host ''

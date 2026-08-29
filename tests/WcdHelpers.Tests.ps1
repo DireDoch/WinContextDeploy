@@ -95,26 +95,46 @@ Describe 'WcdHelpers' {
     }
 
     It 'retourne le bon plan de progression selon le profil d execution' {
+        $config = @{
+            Applications = @(
+                @{ Step = 'AppEverywhere'; Name = 'Everywhere'; Action = 'Launch';  Target = 'a.exe' }
+                @{ Step = 'AppVdiOnly';    Name = 'Workspace';  Action = 'OpenUrl'; Target = 'https://example.com'; Environment = 'Vdi' }
+                @{ Step = 'AppWsOnly';     Name = 'ERP';        Action = 'OpenUrl'; Target = 'https://example.com'; Environment = 'Workstation' }
+            )
+        }
         $executionOptions = [pscustomobject]@{
             FormFactor    = 'Desktop'
             Environment   = 'Vdi'
-            OpenApps      = $false
-            EngineerTypes = @('None')
+            OpenApps      = $true
+            OptionalTools = @()
         }
 
-        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions
+        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $config
 
-        if ($script:PesterMajorVersion -ge 5) {
-            $plan['Config-Power'] | Should -Be @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
-            $plan['Config-Usage'] | Should -Be @('VdiWorkspace')
-            $plan['Config-Applications'] | Should -Be @('ApplicationsSkip')
-            $plan['Config-Engineer'] | Should -Be @('EngineerSkip')
-        } else {
-            ($plan['Config-Power'] -join ',') | Should Be 'ScreenTimeoutAc,SetActiveSchemeCurrent'
-            ($plan['Config-Usage'] -join ',') | Should Be 'VdiWorkspace'
-            ($plan['Config-Applications'] -join ',') | Should Be 'ApplicationsSkip'
-            ($plan['Config-Engineer'] -join ',') | Should Be 'EngineerSkip'
+        $plan['Config-Power'] | Should -Be @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
+        # les cibles filtrees par environnement ne comptent pas dans la progression
+        $plan['Config-Applications'] | Should -Be @('AppEverywhere', 'AppVdiOnly')
+    }
+
+    It 'reduit la progression des applications a une seule etape quand OpenApps est false' {
+        $config = @{ Applications = @(@{ Step = 'AppOne'; Name = 'One'; Action = 'Launch'; Target = 'a.exe' }) }
+        $executionOptions = [pscustomobject]@{
+            FormFactor = 'Laptop'; Environment = 'Workstation'; OpenApps = $false; OptionalTools = @()
         }
+
+        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $config
+
+        $plan['Config-Applications'] | Should -Be @('ApplicationsSkip')
+    }
+
+    It 'nomme les etapes applicatives d apres le manifeste' {
+        $config = @{ Applications = @(@{ Step = 'AppCustom'; Name = 'Our LOB app'; Action = 'Launch'; Target = 'lob.exe' }) }
+
+        $labels = Get-WcdTechnicalStepLabels -Config $config
+
+        $labels['AppCustom'] | Should -Be 'Our LOB app'
+        # les etapes systeme gardent leurs libelles integres
+        $labels['DisplayLanguage'] | Should -Be 'Display language'
     }
 
     It 'localise les libelles de choix sans changer les valeurs canoniques' {

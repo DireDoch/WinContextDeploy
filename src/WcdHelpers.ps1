@@ -106,55 +106,60 @@ function Get-WcdResultSeverity {
 
 function Get-WcdTechnicalStepLabels {
     [CmdletBinding()]
-    param()
+    param(
+        [hashtable]$Config
+    )
 
-    return @{
-        'ScreenTimeoutBattery'       = 'Ecran batterie 10 min'
-        'ScreenTimeoutAc'        = 'Ecran secteur 15 min'
-        'LidActionBatteryNone' = 'Capot batterie: ne rien faire'
-        'LidActionAcNone'  = 'Capot secteur: ne rien faire'
-        'SetActiveSchemeCurrent'   = 'Profil alimentation actif'
-        'DecimalAndCurrency'       = 'Decimal et monetaire'
-        'TaskbarAlignLeft'  = 'Alignement a gauche'
-        'DisableTaskView'      = 'Vue des taches desactivee'
-        'DisplayLanguage'            = 'Langue Windows'
-        'KeyboardLayout'           = 'Clavier Windows'
-        'SAPFrontEnd'              = 'SAP PP1'
-        'VdiWorkspace'              = 'Citrix'
-        'ApplicationsSkip'         = 'Applications ignorees'
-        'AppSoftwareCenter'        = 'Software Center'
-        'AppOutlook'               = 'Outlook'
-        'AppTeams'                 = 'Teams'
-        'AppSnipIt'                = 'Snag it/Snipping Tool'
-        'AppGlobalProtect'         = 'Global Protect'
-        'AppMicroFocus'            = 'MicroFocus'
-        'AppServiceNow'            = 'My Support'
-        'EngineerSkip'             = 'Configuration ingenieur ignoree'
-        'EngineerNvidia'           = 'Nvidia'
-        'EngineerGPS'              = 'GPS'
-        'DeviceManagerStatus'        = 'Device manager'
-        'AS400Presence'            = 'AS400'
-        'AutovuePresence'          = 'Autovue'
+    $labels = @{
+        'ScreenTimeoutBattery'   = 'Screen timeout on battery'
+        'ScreenTimeoutAc'        = 'Screen timeout on AC'
+        'LidActionBatteryNone'   = 'Lid close on battery: do nothing'
+        'LidActionAcNone'        = 'Lid close on AC: do nothing'
+        'SetActiveSchemeCurrent' = 'Active power scheme'
+        'DecimalAndCurrency'     = 'Decimal and currency'
+        'TaskbarAlignLeft'       = 'Taskbar aligned left'
+        'DisableTaskView'        = 'Task view disabled'
+        'DisplayLanguage'        = 'Display language'
+        'KeyboardLayout'         = 'Keyboard layout'
+        'ApplicationsSkip'       = 'Applications skipped'
+        'DeviceManagerStatus'    = 'Device Manager'
+        'NetworkAdapterStatus'   = 'Network adapters'
+        'PrinterAdd'             = 'Printers'
+        'PrinterSkip'            = 'Printers skipped'
     }
+
+    # Application step labels come from the manifest, so a target added there
+    # names itself everywhere without touching this file.
+    if ($null -ne $Config -and $null -ne $Config.Applications) {
+        foreach ($entry in @($Config.Applications)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$entry.Step)) {
+                $labels[[string]$entry.Step] = [string]$entry.Name
+            }
+        }
+    }
+
+    return $labels
 }
 
 function Get-WcdModuleProgressPlan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config
     )
 
-    $engineerSteps = @()
-    foreach ($engineerType in @($ExecutionOptions.EngineerTypes)) {
-        switch ($engineerType) {
-            'Nvidia' { $engineerSteps += 'EngineerNvidia' }
-            'GPS' { $engineerSteps += 'EngineerGPS' }
-        }
+    $applicationSteps = if ($ExecutionOptions.OpenApps) {
+        @(Get-WcdApplicationTarget -Config $Config `
+            -Environment $ExecutionOptions.Environment `
+            -FormFactor $ExecutionOptions.FormFactor `
+            -OptionalTools $ExecutionOptions.OptionalTools |
+            ForEach-Object { [string]$_.Step })
+    } else {
+        @('ApplicationsSkip')
     }
-    if ($engineerSteps.Count -eq 0) {
-        $engineerSteps = @('EngineerSkip')
-    }
+    if ($applicationSteps.Count -eq 0) { $applicationSteps = @('ApplicationsSkip') }
 
     return @{
         'Config-Power' = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
@@ -174,21 +179,7 @@ function Get-WcdModuleProgressPlan {
         'Config-Decimal' = @('DecimalAndCurrency')
         'Config-TaskbarLeft' = @('TaskbarAlignLeft', 'DisableTaskView')
         'Config-Language' = @('DisplayLanguage', 'KeyboardLayout')
-        'Config-Usage' = if ($ExecutionOptions.Environment -eq 'Vdi') { @('VdiWorkspace') } else { @('SAPFrontEnd') }
-        'Config-Applications' = if ($ExecutionOptions.OpenApps) {
-            @(
-                'AppSoftwareCenter',
-                'AppOutlook',
-                'AppTeams',
-                'AppSnipIt',
-                'AppGlobalProtect',
-                'AppMicroFocus',
-                'AppServiceNow'
-            )
-        } else {
-            @('ApplicationsSkip')
-        }
-        'Config-Engineer' = $engineerSteps
+        'Config-Applications' = $applicationSteps
         'Config-DeviceManager' = @('DeviceManagerStatus')
     }
 }
@@ -512,6 +503,56 @@ function Invoke-WcdPowerCfg {
     if ($LASTEXITCODE -ne 0) {
         throw "powercfg a retourne le code $LASTEXITCODE."
     }
+}
+
+function Open-WcdUrl {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Url
+    )
+
+    # Start-Process on a URL hands it to the machine's default browser.
+    Start-Process $Url -ErrorAction Stop
+}
+
+function Get-WcdApplicationTarget {
+    [CmdletBinding()]
+    param(
+        [hashtable]$Config,
+
+        [string]$Environment = 'Workstation',
+
+        [string]$FormFactor = 'Laptop',
+
+        # Names of Prompt entries the technician selected. Prompt entries not
+        # named here are left out entirely.
+        [string[]]$OptionalTools = @()
+    )
+
+    if ($null -eq $Config -or $null -eq $Config.Applications) { return @() }
+
+    return @($Config.Applications | Where-Object {
+        $envOk    = [string]::IsNullOrWhiteSpace([string]$_.Environment) -or $_.Environment -eq $Environment
+        $formOk   = [string]::IsNullOrWhiteSpace([string]$_.FormFactor)  -or $_.FormFactor  -eq $FormFactor
+        $promptOk = -not $_.Prompt -or (@($OptionalTools) -contains [string]$_.Name)
+        $envOk -and $formOk -and $promptOk
+    })
+}
+
+function Get-WcdPromptedApplicationTarget {
+    [CmdletBinding()]
+    param(
+        [hashtable]$Config,
+
+        [string]$Environment = 'Workstation'
+    )
+
+    if ($null -eq $Config -or $null -eq $Config.Applications) { return @() }
+
+    return @($Config.Applications | Where-Object {
+        $_.Prompt -and ([string]::IsNullOrWhiteSpace([string]$_.Environment) -or $_.Environment -eq $Environment)
+    })
 }
 
 function Get-WcdChoiceLabel {

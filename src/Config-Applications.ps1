@@ -1,65 +1,83 @@
 <#
 .SYNOPSIS
-    Ouvre les applications communes (Software Center, Outlook, Chrome, Teams, etc.)
-    selon le mode d'utilisation choisi (Principal ou Secondaire).
+    Verifies and opens the Application Targets declared in the manifest.
 
 .DESCRIPTION
-    Gere l'ouverture sequentielle des applications de configuration sur un poste
-    Principal ou Secondaire. Chaque application produit un resultat avec un
-    indicateur de succes et un niveau de severite.
-    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
+    Walks the Applications list from WinContextDeploy.psd1 in order, running
+    each entry according to its Action. Adding, removing or reordering an
+    application is a manifest edit; this module never needs to change.
 
-.PARAMETER Usage
-    Mode d'utilisation du poste. Valeurs acceptees: 'Workstation', 'Vdi'.
-    Defaut: 'Principal'.
+    WinContextDeploy does not install software. Targets are verified and, where
+    useful, opened for the technician to check by eye.
+
+    Requires WcdHelpers.ps1 to be dot-sourced first.
+
+.PARAMETER Targets
+    Application Target entries to run, already filtered for the current
+    Environment and selected optional tools by Get-WcdApplicationTarget.
 
 .PARAMETER OpenApps
-    Si $false, toutes les ouvertures d'applications sont ignorees.
-    Defaut: $true.
+    When $false, every target is skipped and a single ApplicationsSkip result
+    is returned. Defaults to $true.
 
 .PARAMETER LogPath
-    Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-WcdLogPath.
-
-.PARAMETER Config
-    Hashtable de configuration importee depuis WinContextDeploy.psd1.
-    Permet de surcharger les chemins par defaut des applications.
+    Full path to the log file. Resolved automatically when omitted.
 
 .PARAMETER ProgressCallback
-    Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
+    Scriptblock invoked at the start and end of each step for progress display.
 
 .OUTPUTS
-    [pscustomobject[]] — tableau de resultats avec Step, Success, Error, Severity.
+    [pscustomobject[]] with Step, Success, Error and Severity.
+
+.EXAMPLE
+    $targets = Get-WcdApplicationTarget -Config $config -Environment 'Workstation'
+    Set-WcdApplicationsConfiguration -Targets $targets -LogPath 'C:\temp\log.txt'
 #>
 
-function Open-WcdApplication {
+function Test-WcdTargetPresent {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Path
+        $Entry
     )
 
-    Start-Process $Path -ErrorAction Stop
+    # A bare command such as 'ms-teams.exe' is resolved by the shell, not by
+    # us. Only targets that look like filesystem paths are checked up front.
+    if ($Entry.Action -eq 'OpenUrl')     { return $true }
+    if ($Entry.Action -eq 'CheckProcess'){ return $true }
+    if ([string]$Entry.Target -notmatch '[\\/]') { return $true }
+
+    return (Test-Path -LiteralPath ([string]$Entry.Target))
 }
 
-function Open-WcdInExplorer {
+function Invoke-WcdApplicationTarget {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$FolderPath
+        $Entry
     )
 
-    Start-Process 'explorer.exe' -ArgumentList $FolderPath -ErrorAction Stop
+    switch ($Entry.Action) {
+        'Launch'     { Start-Process ([string]$Entry.Target) -ErrorAction Stop }
+        'OpenFolder' { Start-Process 'explorer.exe' -ArgumentList ([string]$Entry.Target) -ErrorAction Stop }
+        'OpenUrl'    { Open-WcdUrl -Url ([string]$Entry.Target) }
+        'CheckPath'  { }   # presence already established by Test-WcdTargetPresent
+        'CheckProcess' {
+            $running = @(Get-Process -Name @($Entry.Target) -ErrorAction SilentlyContinue)
+            if ($running.Count -eq 0) {
+                throw ('No matching process running ({0}).' -f (@($Entry.Target) -join ', '))
+            }
+        }
+        default { throw ("Unknown Action '{0}' for step '{1}'." -f $Entry.Action, $Entry.Step) }
+    }
 }
 
 function Set-WcdApplicationsConfiguration {
     [CmdletBinding()]
     param(
-        [ValidateSet('Workstation', 'Vdi')]
-        [string]$Environment = 'Workstation',
+        [object[]]$Targets = @(),
         [bool]$OpenApps = $true,
         [string]$LogPath,
-        [hashtable]$Config,
         [scriptblock]$ProgressCallback
     )
 
@@ -68,190 +86,51 @@ function Set-WcdApplicationsConfiguration {
     $moduleName = 'Config-Applications'
 
     if (-not $OpenApps) {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: opening declined by the technician (environment: $Environment)."
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Applications: opening declined by the technician.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ApplicationsSkip' -Event 'Start'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ApplicationsSkip' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'ApplicationsSkip'; Success = $true; Error = ''; Severity = 'INFO' }
-        return $results
+        return @([pscustomobject]@{ Step = 'ApplicationsSkip'; Success = $true; Error = ''; Severity = 'INFO' })
     }
 
-    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: opening configuration targets (environment: $Environment)."
+    foreach ($entry in @($Targets)) {
+        $step = [string]$entry.Step
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $step -Event 'Start'
 
-    $apps = $null
-    if ($null -ne $Config) { $apps = $Config.Applications }
+        try {
+            if (-not (Test-WcdTargetPresent -Entry $entry)) {
+                # Absent and declared Optional is a normal outcome on many
+                # machines; absent and required is worth a warning.
+                $severity = if ($entry.Optional) { 'INFO' } else { 'WARNING' }
+                $kind     = if ($entry.Optional) { 'success' } else { 'warning' }
+                $detail   = '{0} not found at {1}' -f $entry.Name, $entry.Target
 
-    # 1. Software Center
-    $scPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft Configuration Manager\Configuration Manager\Software Center'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.SoftwareCenter)) {
-        $scPath = $apps.SoftwareCenter
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Start'
-        if (Test-Path -LiteralPath $scPath) {
-            Open-WcdApplication -Path $scPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Software Center opened.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'AppSoftwareCenter'; Success = $true; Error = '' }
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Software Center not found.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppSoftwareCenter'; Success = $true; Error = 'Software Center not found.'; Severity = 'WARNING' }
-        }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Software Center: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSoftwareCenter' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'AppSoftwareCenter'; Success = $false; Error = $_.Exception.Message }
-    }
+                Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $detail
+                Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $step -Event 'Finish' -Kind $kind
+                $results += [pscustomobject]@{ Step = $step; Success = $true; Error = $detail; Severity = $severity }
+                continue
+            }
 
-    # 2. Outlook
-    $outlookPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Outlook (classic)'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.Outlook)) {
-        $outlookPath = $apps.Outlook
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Start'
-        if (Test-Path -LiteralPath $outlookPath) {
-            Open-WcdApplication -Path $outlookPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outlook opened.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'AppOutlook'; Success = $true; Error = '' }
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Outlook not found.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppOutlook'; Success = $true; Error = 'Outlook not found.'; Severity = 'WARNING' }
-        }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Outlook: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppOutlook' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'AppOutlook'; Success = $false; Error = $_.Exception.Message }
-    }
+            Invoke-WcdApplicationTarget -Entry $entry
 
-    # 3. Chrome
-    $chromePath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Google Chrome.lnk'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.ChromePath)) {
-        $chromePath = $apps.ChromePath
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Start'
-        if (Test-Path -LiteralPath $chromePath) {
-            Open-WcdApplication -Path $chromePath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Chrome opened.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'AppChrome'; Success = $true; Error = '' }
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Chrome not found.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppChrome'; Success = $true; Error = 'Chrome not found.'; Severity = 'WARNING' }
-        }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Chrome: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppChrome' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'AppChrome'; Success = $false; Error = $_.Exception.Message }
-    }
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('{0}: {1} ok.' -f $entry.Name, $entry.Action)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $step -Event 'Finish' -Kind 'success'
+            $results += [pscustomobject]@{ Step = $step; Success = $true; Error = '' }
+        } catch {
+            $message = $_.Exception.Message
+            # CheckProcess failing means "not running", which is information,
+            # not a broken step.
+            $severity = if ($entry.Action -eq 'CheckProcess') { 'WARNING' } else { 'ERROR' }
+            $kind     = if ($entry.Action -eq 'CheckProcess') { 'warning' } else { 'error' }
 
-    # 4. Teams — lancement direct via ms-teams.exe
-    $teamsExe = 'ms-teams.exe'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.TeamsExe)) {
-        $teamsExe = $apps.TeamsExe
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppTeams' -Event 'Start'
-        Start-Process $teamsExe -ErrorAction Stop
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Teams opened.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppTeams' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'AppTeams'; Success = $true; Error = '' }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Teams not found.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppTeams' -Event 'Finish' -Kind 'warning'
-        $results += [pscustomobject]@{ Step = 'AppTeams'; Success = $true; Error = 'Teams not found.'; Severity = 'WARNING' }
-    }
-
-    # 5. Snip-it (Outil Capture) — lancement direct via snippingtool
-    $snipExe = 'snippingtool'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.SnipItExe)) {
-        $snipExe = $apps.SnipItExe
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSnipIt' -Event 'Start'
-        Start-Process $snipExe -ErrorAction Stop
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Snipping Tool opened.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSnipIt' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'AppSnipIt'; Success = $true; Error = '' }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Snipping Tool not found.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppSnipIt' -Event 'Finish' -Kind 'warning'
-        $results += [pscustomobject]@{ Step = 'AppSnipIt'; Success = $true; Error = 'Snipping Tool not found.'; Severity = 'WARNING' }
-    }
-
-    # 6. GlobalProtect — verification par nom de processus dans le gestionnaire des taches
-    # PanGPA.exe est le processus principal; les PIDs sont dynamiques donc on detecte par nom.
-    $gpProcessNames = @('PanGPA', 'pangps')
-    if ($null -ne $apps -and $null -ne $apps.GlobalProtectProcessNames -and @($apps.GlobalProtectProcessNames).Count -gt 0) {
-        $gpProcessNames = @($apps.GlobalProtectProcessNames)
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Start'
-        $gpFound = $false
-        foreach ($gpName in $gpProcessNames) {
-            $proc = Get-Process -Name $gpName -ErrorAction SilentlyContinue
-            if ($null -ne $proc) {
-                $gpFound = $true
-                break
+            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('{0}: {1}' -f $entry.Name, $message)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $step -Event 'Finish' -Kind $kind
+            $results += [pscustomobject]@{
+                Step     = $step
+                Success  = ($severity -ne 'ERROR')
+                Error    = $message
+                Severity = $severity
             }
         }
-        if ($gpFound) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'VPN client running.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $true; Error = '' }
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'VPN client not detected among running processes.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $true; Error = 'VPN client not detected among running processes.'; Severity = 'WARNING' }
-        }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('VPN client: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppGlobalProtect' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'AppGlobalProtect'; Success = $false; Error = $_.Exception.Message }
-    }
-
-    # 7. Micro Focus — ouvrir dans l'explorateur SEULEMENT si present
-    $mfPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Micro Focus'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.MicroFocus)) {
-        $mfPath = $apps.MicroFocus
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Start'
-        if (Test-Path -LiteralPath $mfPath) {
-            Open-WcdInExplorer -FolderPath $mfPath
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Terminal emulator: folder opened in Explorer.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'AppMicroFocus'; Success = $true; Error = '' }
-        } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Terminal emulator: not present, step skipped.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'AppMicroFocus'; Success = $true; Error = ''; Severity = 'INFO' }
-        }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Terminal emulator: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppMicroFocus' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'AppMicroFocus'; Success = $false; Error = $_.Exception.Message }
-    }
-
-    # 8. ServiceNow (lien web)
-    $snUrl = 'https://example.service-now.com/sp'
-    if ($null -ne $apps -and -not [string]::IsNullOrWhiteSpace($apps.ServiceNowUrl)) {
-        $snUrl = $apps.ServiceNowUrl
-    }
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppServiceNow' -Event 'Start'
-        Open-WcdApplication -Path $snUrl
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Helpdesk portal opened.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppServiceNow' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'AppServiceNow'; Success = $true; Error = '' }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Helpdesk portal: {0}' -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'AppServiceNow' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'AppServiceNow'; Success = $false; Error = $_.Exception.Message }
     }
 
     return $results
