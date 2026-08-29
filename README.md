@@ -30,21 +30,26 @@ left/right arrow keys to change a choice and Enter to confirm.
 | Prompt | Choices | Default |
 |---|---|---|
 | Windows system language | `fr-CA` / `en-US` | `fr-CA` |
-| Device type | `Portable` (laptop) / `Bureau` (desktop) | `Portable` |
-| Device usage | `Principal` (local) / `Secondaire` (Citrix) | `Principal` |
+| Form factor | `Laptop` / `Desktop` | `Laptop` |
+| Environment | `Workstation` (local) / `Vdi` (Citrix) | `Workstation` |
 | Open configuration applications | Yes / No | Yes |
 | Engineer workstation | Yes / No | No |
 
-Device type selects the power profile (battery and lid-close settings apply to
-laptops only). Device usage selects which applications are relevant — a Citrix
-endpoint skips the locally installed line-of-business checks.
+Form factor selects the power profile — battery and lid-close settings apply to
+laptops only. Environment selects which applications are relevant: a `Vdi`
+endpoint skips the locally installed line-of-business checks, since those live in
+the remote session.
+
+Prompts are shown in the UI language (`-ScriptUI FR|EN`), so a French run offers
+*Portable* / *Bureau* and *Principal* / *Secondaire* with their usual shortcut
+keys, while the values above are what the code and logs use.
 
 Or run it directly:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1
 powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 `
-    -Language en-US -DeviceType Bureau -Usage Principal -NonInteractive
+    -Language en-US -FormFactor Desktop -Environment Workstation -NonInteractive
 ```
 
 ## Configuration

@@ -27,7 +27,7 @@ Describe 'Config-Engineer' {
         Mock -CommandName 'Open-WcdUrlInChrome' {}
         Mock -CommandName 'Open-WcdShortcut' {}
 
-        $results = @(Set-WcdEngineerConfiguration -EngineerTypes @('Non') -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdEngineerConfiguration -EngineerTypes @('None') -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1

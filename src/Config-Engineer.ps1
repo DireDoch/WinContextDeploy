@@ -5,14 +5,14 @@
 
 .DESCRIPTION
     Supporte la multi-selection: plusieurs types peuvent etre traites en une
-    seule execution. Si le type est 'Non', l'etape est ignoree sans erreur.
+    seule execution. Si le type est 'None', l'etape est ignoree sans erreur.
     Tente d'ouvrir les URLs dans Chrome; bascule sur le navigateur par defaut
     si Chrome est introuvable.
     Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER EngineerTypes
-    Tableau de types d'ingenieur. Valeurs acceptees: 'Nvidia', 'GPS', 'Non'.
-    Defaut: @('Non').
+    Tableau de types d'ingenieur. Valeurs acceptees: 'Nvidia', 'GPS', 'None'.
+    Defaut: @('None').
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
@@ -59,7 +59,7 @@ function Open-WcdShortcut {
 function Set-WcdEngineerConfiguration {
     [CmdletBinding()]
     param(
-        [string[]]$EngineerTypes = @('Non'),
+        [string[]]$EngineerTypes = @('None'),
         [string]$LogPath,
         [hashtable]$Config,
         [scriptblock]$ProgressCallback
@@ -68,7 +68,7 @@ function Set-WcdEngineerConfiguration {
     $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $moduleName = 'Config-Engineer'
 
-    if ($EngineerTypes.Count -eq 1 -and $EngineerTypes[0] -eq 'Non') {
+    if ($EngineerTypes.Count -eq 1 -and $EngineerTypes[0] -eq 'None') {
         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Ingenieur: aucune configuration requise.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Start'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Finish' -Kind 'success'

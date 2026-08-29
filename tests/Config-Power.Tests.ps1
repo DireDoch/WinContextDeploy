@@ -18,7 +18,7 @@ Describe 'Config-Power' {
 
         Mock -CommandName 'Invoke-WcdPowerCfg' {}
 
-        $results = Set-WcdPowerConfiguration -DeviceType 'Portable' -LogPath $logPath
+        $results = Set-WcdPowerConfiguration -FormFactor 'Laptop' -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 5
@@ -50,7 +50,7 @@ Describe 'Config-Power' {
 
         Mock -CommandName 'Invoke-WcdPowerCfg' {}
 
-        $results = Set-WcdPowerConfiguration -DeviceType 'Bureau' -LogPath $logPath
+        $results = Set-WcdPowerConfiguration -FormFactor 'Desktop' -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2

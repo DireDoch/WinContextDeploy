@@ -157,7 +157,7 @@ function Get-WcdModuleProgressPlan {
     }
 
     return @{
-        'Config-Power' = if ($ExecutionOptions.DeviceType -eq 'Portable') {
+        'Config-Power' = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
             @(
                 'EcranBatterie10min',
                 'EcranSecteur15min',
@@ -174,7 +174,7 @@ function Get-WcdModuleProgressPlan {
         'Config-Decimal' = @('DecimalEtMonetaire')
         'Config-TaskbarLeft' = @('TaskbarAlignementGauche', 'DesactiverVueTaches')
         'Config-Language' = @('LangueWindows', 'ClavierWindows')
-        'Config-Usage' = if ($ExecutionOptions.Usage -eq 'Secondaire') { @('UsageCitrix') } else { @('SAPFrontEnd') }
+        'Config-Usage' = if ($ExecutionOptions.Environment -eq 'Vdi') { @('UsageCitrix') } else { @('SAPFrontEnd') }
         'Config-Applications' = if ($ExecutionOptions.OpenApps) {
             @(
                 'AppSoftwareCenter',
@@ -512,6 +512,21 @@ function Invoke-WcdPowerCfg {
     if ($LASTEXITCODE -ne 0) {
         throw "powercfg a retourne le code $LASTEXITCODE."
     }
+}
+
+function Get-WcdChoiceLabel {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Value,
+
+        [hashtable]$Labels
+    )
+
+    # Choice values are canonical English so the code reads the same in every
+    # language; only what the technician sees is localized.
+    if ($null -ne $Labels -and $Labels.ContainsKey($Value)) { return $Labels[$Value] }
+    return $Value
 }
 
 function Import-WcdConfig {

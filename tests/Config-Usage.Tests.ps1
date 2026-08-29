@@ -31,7 +31,7 @@ Describe 'Config-Usage' {
         # Creer le dossier SAP de test
         New-Item -Path (Join-Path $TestDrive 'SAP') -ItemType Directory -Force | Out-Null
 
-        $results = @(Set-WcdUsageConfiguration -Usage 'Principal' -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdUsageConfiguration -Environment 'Workstation' -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1
@@ -56,7 +56,7 @@ Describe 'Config-Usage' {
             }
         }
 
-        $results = @(Set-WcdUsageConfiguration -Usage 'Principal' -LogPath $logPath -Config $noSapConfig)
+        $results = @(Set-WcdUsageConfiguration -Environment 'Workstation' -LogPath $logPath -Config $noSapConfig)
         $sapResult = $results | Where-Object { $_.Step -eq 'SAPFrontEnd' }
 
         if ($script:PesterMajorVersion -ge 5) {
@@ -76,7 +76,7 @@ Describe 'Config-Usage' {
 
         Mock -CommandName 'Open-WcdUrl' {}
 
-        $results = @(Set-WcdUsageConfiguration -Usage 'Secondaire' -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdUsageConfiguration -Environment 'Vdi' -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1
@@ -96,7 +96,7 @@ Describe 'Config-Usage' {
 
         Mock -CommandName 'Open-WcdUrl' { throw 'Navigation bloquee' }
 
-        $results = @(Set-WcdUsageConfiguration -Usage 'Secondaire' -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdUsageConfiguration -Environment 'Vdi' -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results[0].Success | Should -BeFalse

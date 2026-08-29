@@ -96,10 +96,10 @@ Describe 'WcdHelpers' {
 
     It 'retourne le bon plan de progression selon le profil d execution' {
         $executionOptions = [pscustomobject]@{
-            DeviceType    = 'Bureau'
-            Usage         = 'Secondaire'
+            FormFactor    = 'Desktop'
+            Environment   = 'Vdi'
             OpenApps      = $false
-            EngineerTypes = @('Non')
+            EngineerTypes = @('None')
         }
 
         $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions
@@ -115,5 +115,16 @@ Describe 'WcdHelpers' {
             ($plan['Config-Applications'] -join ',') | Should Be 'ApplicationsSkip'
             ($plan['Config-Engineer'] -join ',') | Should Be 'EngineerSkip'
         }
+    }
+
+    It 'localise les libelles de choix sans changer les valeurs canoniques' {
+        $fr = @{ Laptop = 'Portable'; Vdi = 'Citrix' }
+
+        Get-WcdChoiceLabel -Value 'Laptop' -Labels $fr | Should -Be 'Portable'
+        Get-WcdChoiceLabel -Value 'Vdi'    -Labels $fr | Should -Be 'Citrix'
+        # valeur sans traduction: retournee telle quelle
+        Get-WcdChoiceLabel -Value 'Desktop' -Labels $fr | Should -Be 'Desktop'
+        # aucune table fournie: retournee telle quelle
+        Get-WcdChoiceLabel -Value 'Laptop' | Should -Be 'Laptop'
     }
 }

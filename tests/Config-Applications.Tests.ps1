@@ -33,7 +33,7 @@ Describe 'Config-Applications' {
         Mock -CommandName 'Open-WcdApplication' {}
         Mock -CommandName 'Open-WcdInExplorer' {}
 
-        $results = @(Set-WcdApplicationsConfiguration -Usage 'Principal' -OpenApps $false -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdApplicationsConfiguration -Environment 'Workstation' -OpenApps $false -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1
@@ -57,7 +57,7 @@ Describe 'Config-Applications' {
         Mock -CommandName 'Test-Path' { return $false } -ParameterFilter { $LiteralPath -and $LiteralPath -ne $logPath -and $LiteralPath -notlike '*log*' }
         Mock -CommandName 'Get-Process' { return $null } -ParameterFilter { $Name -in @('PanGPA_test', 'pangps_test') }
 
-        $results = @(Set-WcdApplicationsConfiguration -Usage 'Principal' -OpenApps $true -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdApplicationsConfiguration -Environment 'Workstation' -OpenApps $true -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -BeGreaterOrEqual 8
@@ -85,7 +85,7 @@ Describe 'Config-Applications' {
         # GlobalProtect detecte via Get-Process (PanGPA_test simule un processus actif)
         Mock -CommandName 'Get-Process' { return [pscustomobject]@{ Name = $Name; Id = 99999 } } -ParameterFilter { $Name -eq 'PanGPA_test' }
 
-        $results = @(Set-WcdApplicationsConfiguration -Usage 'Principal' -OpenApps $true -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdApplicationsConfiguration -Environment 'Workstation' -OpenApps $true -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 8
@@ -124,7 +124,7 @@ Describe 'Config-Applications' {
             }
         }
 
-        $results = @(Set-WcdApplicationsConfiguration -Usage 'Secondaire' -OpenApps $true -LogPath $logPath -Config $configNoMF)
+        $results = @(Set-WcdApplicationsConfiguration -Environment 'Vdi' -OpenApps $true -LogPath $logPath -Config $configNoMF)
 
         $mfResult = $results | Where-Object { $_.Step -eq 'AppMicroFocus' }
 

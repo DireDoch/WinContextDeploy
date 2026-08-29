@@ -4,9 +4,9 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -DeviceType Portable
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -Language en-US -DeviceType Bureau -Usage Secondaire -NonInteractive
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -DeviceType Bureau -LogPath C:\temp\log.txt
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -FormFactor Laptop
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -Language en-US -FormFactor Desktop -Environment Vdi -NonInteractive
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -FormFactor Desktop -LogPath C:\temp\log.txt
 #   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -HistoryLogPath D:\log.txt -LocalProjectRoot C:\Temp\WinContextDeploy
 
 [CmdletBinding()]
@@ -14,11 +14,11 @@ param(
     [ValidateSet('fr-CA', 'en-US')]
     [string]$Language,
 
-    [ValidateSet('Portable', 'Bureau')]
-    [string]$DeviceType,
+    [ValidateSet('Laptop', 'Desktop')]
+    [string]$FormFactor,
 
-    [ValidateSet('Principal', 'Secondaire')]
-    [string]$Usage,
+    [ValidateSet('Workstation', 'Vdi')]
+    [string]$Environment,
 
     [string]$LogPath,
 
@@ -44,6 +44,20 @@ param(
 $T = if ($ScriptUI -eq 'EN') {
     @{
         BannerSubtitle          = 'Post-image configuration and quick device diagnostics'
+        KeyLaptop               = 'L'
+        KeyDesktop              = 'D'
+        KeyWorkstation          = 'W'
+        KeyVdi                  = 'V'
+        KeyYes                  = 'Y'
+        KeyNo                   = 'N'
+        Labels                  = @{
+            Laptop      = 'Laptop'
+            Desktop     = 'Desktop'
+            Workstation = 'Workstation'
+            Vdi         = 'Citrix / VDI'
+            Yes         = 'Yes'
+            No          = 'No'
+        }
         NoChoicesAvailable      = 'No choices available.'
         DefaultLabel            = '[default]'
         InvalidChoice           = 'Invalid choice. Try again.'
@@ -121,6 +135,20 @@ $T = if ($ScriptUI -eq 'EN') {
 } else {
     @{
         BannerSubtitle          = 'Configuration post-image et diagnostic rapide du poste'
+        KeyLaptop               = 'P'
+        KeyDesktop              = 'B'
+        KeyWorkstation          = 'P'
+        KeyVdi                  = 'S'
+        KeyYes                  = 'O'
+        KeyNo                   = 'N'
+        Labels                  = @{
+            Laptop      = 'Portable'
+            Desktop     = 'Bureau'
+            Workstation = 'Principal'
+            Vdi         = 'Citrix'
+            Yes         = 'Oui'
+            No          = 'Non'
+        }
         NoChoicesAvailable      = 'Aucun choix disponible.'
         DefaultLabel            = '[defaut]'
         InvalidChoice           = 'Choix invalide. Reessayer.'
@@ -293,9 +321,9 @@ function Read-WcdChoice {
         while ($true) {
             $suffix = ($entries | ForEach-Object {
                 if ([string]$_.Key -eq $DefaultKey) {
-                    ('{0}= {1} ' + $T.DefaultLabel) -f $_.Key, $_.Value
+                    ('{0}= {1} ' + $T.DefaultLabel) -f $_.Key, (Get-WcdChoiceLabel -Value $_.Value -Labels $T.Labels)
                 } else {
-                    '{0}= {1}' -f $_.Key, $_.Value
+                    '{0}= {1}' -f $_.Key, (Get-WcdChoiceLabel -Value $_.Value -Labels $T.Labels)
                 }
             }) -join ' | '
 
@@ -340,7 +368,7 @@ function Read-WcdChoice {
     while ($true) {
         Write-Host "`r" -NoNewline
         for ($i = 0; $i -lt $entries.Count; $i++) {
-            $label = '{0}: {1}' -f $entries[$i].Key, $entries[$i].Value
+            $label = '{0}: {1}' -f $entries[$i].Key, (Get-WcdChoiceLabel -Value $entries[$i].Value -Labels $T.Labels)
             if ($i -eq $selectedIndex) {
                 Write-Host ('[ {0} ] ' -f $label) -NoNewline -ForegroundColor Black -BackgroundColor Yellow
             } else {
@@ -479,16 +507,16 @@ function Resolve-WcdExecutionOptions {
     [CmdletBinding()]
     param(
         [string]$SelectedLanguage,
-        [string]$SelectedDeviceType,
-        [string]$SelectedUsage,
+        [string]$SelectedFormFactor,
+        [string]$SelectedEnvironment,
         [string]$SelectedOpenApps,
         [string]$SelectedEngineerType,
         [switch]$DisablePrompt
     )
 
     $languageResult = $SelectedLanguage
-    $deviceResult = $SelectedDeviceType
-    $usageResult = $SelectedUsage
+    $deviceResult = $SelectedFormFactor
+    $usageResult = $SelectedEnvironment
     $openAppsResult = $SelectedOpenApps
     $engineerResult = $SelectedEngineerType
 
@@ -503,56 +531,56 @@ function Resolve-WcdExecutionOptions {
 
         if (-not $deviceResult) {
             Write-Host ''
-            $deviceResult = Read-WcdChoice -Prompt $T.PromptDeviceType -Choices ([ordered]@{ P = 'Portable'; B = 'Bureau' }) -DefaultKey 'P' `
+            $deviceResult = Read-WcdChoice -Prompt $T.PromptDeviceType -Choices ([ordered]@{ $T.KeyLaptop = 'Laptop'; $T.KeyDesktop = 'Desktop' }) -DefaultKey $T.KeyLaptop `
                 -Description @($T.PromptDeviceDesc1, $T.PromptDeviceDesc2)
         }
 
         if (-not $usageResult) {
             Write-Host ''
-            $usageResult = Read-WcdChoice -Prompt $T.PromptUsage -Choices ([ordered]@{ P = 'Principal'; S = 'Secondaire' }) -DefaultKey 'P' `
+            $usageResult = Read-WcdChoice -Prompt $T.PromptUsage -Choices ([ordered]@{ $T.KeyWorkstation = 'Workstation'; $T.KeyVdi = 'Vdi' }) -DefaultKey $T.KeyWorkstation `
                 -Description @($T.PromptUsageDesc1, $T.PromptUsageDesc2)
         }
 
-        $usageLabel = if ($usageResult -eq 'Secondaire') { 'Citrix' } else { 'Principal' }
+        $usageLabel = Get-WcdChoiceLabel -Value $usageResult -Labels $T.Labels
 
         if (-not $openAppsResult) {
             Write-Host ''
-            $openAppsResult = Read-WcdChoice -Prompt ($T.PromptOpenApps -f $usageLabel) -Choices ([ordered]@{ O = 'Oui'; N = 'Non' }) -DefaultKey 'O' `
+            $openAppsResult = Read-WcdChoice -Prompt ($T.PromptOpenApps -f $usageLabel) -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyYes `
                 -Description @($T.PromptOpenAppsDesc1, $T.PromptOpenAppsDesc2)
         }
 
         if (-not $engineerResult) {
             Write-Host ''
-            $engineerYesNo = Read-WcdChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ O = 'Oui'; N = 'Non' }) -DefaultKey 'N' `
+            $engineerYesNo = Read-WcdChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyNo `
                 -Description @($T.PromptEngineerDesc1, $T.PromptEngineerDesc2)
-            if ($engineerYesNo -eq 'Oui') {
+            if ($engineerYesNo -eq 'Yes') {
                 $engineerTypes = Read-WcdEngineerChoice
             } else {
-                $engineerTypes = @('Non')
+                $engineerTypes = @('None')
             }
         }
     }
 
     # Traitement du parametre CLI -EngineerType (valeurs separees par virgule)
     if ($engineerTypes.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($engineerResult)) {
-        if ($engineerResult -eq 'Non') {
-            $engineerTypes = @('Non')
+        if ($engineerResult -eq 'None') {
+            $engineerTypes = @('None')
         } else {
             $engineerTypes = @($engineerResult -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         }
     }
 
     if (-not $languageResult)  { $languageResult  = 'fr-CA' }
-    if (-not $deviceResult)    { $deviceResult    = 'Portable' }
-    if (-not $usageResult)     { $usageResult     = 'Principal' }
-    if (-not $openAppsResult)  { $openAppsResult  = 'Oui' }
-    if ($engineerTypes.Count -eq 0) { $engineerTypes = @('Non') }
+    if (-not $deviceResult)    { $deviceResult    = 'Laptop' }
+    if (-not $usageResult)     { $usageResult     = 'Workstation' }
+    if (-not $openAppsResult)  { $openAppsResult  = 'Yes' }
+    if ($engineerTypes.Count -eq 0) { $engineerTypes = @('None') }
 
     return [pscustomobject]@{
         Language      = $languageResult
-        DeviceType    = $deviceResult
-        Usage         = $usageResult
-        OpenApps      = ($openAppsResult -eq 'Oui')
+        FormFactor    = $deviceResult
+        Environment   = $usageResult
+        OpenApps      = ($openAppsResult -eq 'Yes')
         EngineerTypes = $engineerTypes
     }
 }
@@ -573,12 +601,12 @@ if (-not [string]::IsNullOrWhiteSpace($resolvedUsbSourceRoot) -and (Test-Path -L
     $resolvedUsbSourceRoot = (Resolve-Path -LiteralPath $resolvedUsbSourceRoot).Path
 }
 
-$openAppsValue = if ($OpenApps) { 'Oui' } else { '' }
+$openAppsValue = if ($OpenApps) { 'Yes' } else { '' }
 
 $executionOptions = Resolve-WcdExecutionOptions `
     -SelectedLanguage $Language `
-    -SelectedDeviceType $DeviceType `
-    -SelectedUsage $Usage `
+    -SelectedFormFactor $FormFactor `
+    -SelectedEnvironment $Environment `
     -SelectedOpenApps $openAppsValue `
     -SelectedEngineerType $EngineerType `
     -DisablePrompt:$NonInteractive
@@ -601,7 +629,7 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
 
 Initialize-WcdLog -Path $resolvedLogPath
 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message '=== Debut execution WinContextDeploy ==='
-Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | DeviceType: {1} | Usage: {2} | OpenApps: {3} | Engineer: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.DeviceType, $executionOptions.Usage, $executionOptions.OpenApps, ($executionOptions.EngineerTypes -join ','), $resolvedLogPath)
+Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | FormFactor: {1} | Environment: {2} | OpenApps: {3} | Engineer: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.FormFactor, $executionOptions.Environment, $executionOptions.OpenApps, ($executionOptions.EngineerTypes -join ','), $resolvedLogPath)
 if (-not [string]::IsNullOrWhiteSpace($resolvedLocalProjectRoot)) {
     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("LocalProjectRoot: {0}" -f $resolvedLocalProjectRoot)
 }
@@ -842,7 +870,7 @@ function Get-WcdAS400DiagnosticResult {
         [hashtable]$Config
     )
 
-    if ($ExecutionOptions.Usage -ne 'Principal') {
+    if ($ExecutionOptions.Environment -ne 'Workstation') {
         return $null
     }
 
@@ -909,7 +937,7 @@ function Get-WcdAutovueDiagnosticResult {
         [hashtable]$Config
     )
 
-    if ($ExecutionOptions.Usage -ne 'Principal') {
+    if ($ExecutionOptions.Environment -ne 'Workstation') {
         return $null
     }
 
@@ -979,7 +1007,7 @@ function Get-WcdFinalChecklistEntries {
     $applicationsSkipped = $lookup.ContainsKey('ApplicationsSkip')
     $applicationManualDetail = $T.ApplicationManualDetail
     $standardManualDetail = $T.StandardManualDetail
-    $powerStepKeys = if ($ExecutionOptions.DeviceType -eq 'Portable') {
+    $powerStepKeys = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
         @(
             'EcranBatterie10min',
             'EcranSecteur15min',
@@ -1026,7 +1054,7 @@ function Get-WcdFinalChecklistEntries {
         $entries += Resolve-WcdAutomaticEntry -Label 'Snag it/Snipping Tool' -ResultLookup $lookup -StepKeys @('AppSnipIt') -StepLabels $StepLabels
     }
 
-    if ($ExecutionOptions.Usage -eq 'Principal') {
+    if ($ExecutionOptions.Environment -eq 'Workstation') {
         $entries += Resolve-WcdAutomaticEntry -Label 'SAP PP1' -ResultLookup $lookup -StepKeys @('SAPFrontEnd') -StepLabels $StepLabels
     } else {
         $entries += New-WcdDiagnosticEntry -Label 'SAP PP1' -Kind 'na' -Detail $T.SecondaryNA
@@ -1037,7 +1065,7 @@ function Get-WcdFinalChecklistEntries {
     $entries += Resolve-WcdAutomaticEntry -Label 'Decimal (reg-set)' -ResultLookup $lookup -StepKeys @('DecimalEtMonetaire') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label 'Power options' -ResultLookup $lookup -StepKeys $powerStepKeys -StepLabels $StepLabels
 
-    if ($ExecutionOptions.Usage -eq 'Principal') {
+    if ($ExecutionOptions.Environment -eq 'Workstation') {
         $entries += Resolve-WcdAutomaticEntry -Label 'AS400' -ResultLookup $lookup -StepKeys @('AS400Presence') -StepLabels $StepLabels
     } else {
         $entries += New-WcdDiagnosticEntry -Label 'AS400' -Kind 'na' -Detail $T.SecondaryNA
@@ -1052,13 +1080,13 @@ function Get-WcdFinalChecklistEntries {
     $entries += New-WcdDiagnosticEntry -Label 'Lecteurs reseau' -Kind 'manual' -Detail $standardManualDetail
     $entries += New-WcdDiagnosticEntry -Label 'Synchronisation' -Kind 'manual' -Detail $standardManualDetail
 
-    if ($ExecutionOptions.Usage -eq 'Secondaire') {
+    if ($ExecutionOptions.Environment -eq 'Vdi') {
         $entries += Resolve-WcdAutomaticEntry -Label 'Citrix' -ResultLookup $lookup -StepKeys @('UsageCitrix') -StepLabels $StepLabels
     } else {
         $entries += New-WcdDiagnosticEntry -Label 'Citrix' -Kind 'na' -Detail $T.PrimaryNA
     }
 
-    if ($ExecutionOptions.Usage -eq 'Principal') {
+    if ($ExecutionOptions.Environment -eq 'Workstation') {
         $entries += Resolve-WcdAutomaticEntry -Label 'Autovue' -ResultLookup $lookup -StepKeys @('AutovuePresence') -StepLabels $StepLabels
     } else {
         $entries += New-WcdDiagnosticEntry -Label 'Autovue' -Kind 'na' -Detail $T.SecondaryNA
@@ -1180,7 +1208,7 @@ foreach ($mod in $modules) {
     try {
         switch ($modName) {
             'Config-Power' {
-                $modResults = @(Set-WcdPowerConfiguration -DeviceType $executionOptions.DeviceType -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdPowerConfiguration -FormFactor $executionOptions.FormFactor -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Decimal' {
                 $modResults = @(Set-WcdDecimalConfiguration -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
@@ -1192,10 +1220,10 @@ foreach ($mod in $modules) {
                 $modResults = @(Set-WcdLanguageConfiguration -Culture $executionOptions.Language -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Usage' {
-                $modResults = @(Set-WcdUsageConfiguration -Usage $executionOptions.Usage -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdUsageConfiguration -Environment $executionOptions.Environment -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
             }
             'Config-Applications' {
-                $modResults = @(Set-WcdApplicationsConfiguration -Usage $executionOptions.Usage -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdApplicationsConfiguration -Environment $executionOptions.Environment -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
             }
             'Config-Engineer' {
                 $modResults = @(Set-WcdEngineerConfiguration -EngineerTypes $executionOptions.EngineerTypes -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)

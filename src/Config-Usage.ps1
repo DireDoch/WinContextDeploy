@@ -10,7 +10,7 @@
     Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER Usage
-    Mode d'utilisation. Valeurs acceptees: 'Principal', 'Secondaire'.
+    Mode d'utilisation. Valeurs acceptees: 'Workstation', 'Vdi'.
     Defaut: 'Principal'.
 
 .PARAMETER LogPath
@@ -51,8 +51,8 @@ function Open-WcdExplorer {
 function Set-WcdUsageConfiguration {
     [CmdletBinding()]
     param(
-        [ValidateSet('Principal', 'Secondaire')]
-        [string]$Usage = 'Principal',
+        [ValidateSet('Workstation', 'Vdi')]
+        [string]$Environment = 'Workstation',
         [string]$LogPath,
         [hashtable]$Config,
         [scriptblock]$ProgressCallback
@@ -62,7 +62,7 @@ function Set-WcdUsageConfiguration {
     $results = @()
     $moduleName = 'Config-Usage'
 
-    if ($Usage -eq 'Secondaire') {
+    if ($Environment -eq 'Vdi') {
         # --- Citrix: ouvrir la page de telechargement ---
         $citrixUrl = 'https://www.citrix.com/downloads/workspace-app/'
         if ($null -ne $Config -and $null -ne $Config.Citrix) {

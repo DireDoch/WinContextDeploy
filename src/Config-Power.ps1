@@ -10,7 +10,7 @@
     Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER DeviceType
-    Type de machine. Valeurs acceptees: 'Portable', 'Bureau'.
+    Type de machine. Valeurs acceptees: 'Laptop', 'Desktop'.
     Les etapes batterie et capot sont ignorees pour les postes de type 'Bureau'.
     Defaut: 'Portable'.
 
@@ -28,8 +28,8 @@
 function Set-WcdPowerConfiguration {
     [CmdletBinding()]
     param(
-        [ValidateSet('Portable', 'Bureau')]
-        [string]$DeviceType = 'Portable',
+        [ValidateSet('Laptop', 'Desktop')]
+        [string]$FormFactor = 'Laptop',
         [string]$LogPath,
         [scriptblock]$ProgressCallback
     )
@@ -38,7 +38,7 @@ function Set-WcdPowerConfiguration {
     $results = @()
     $moduleName = 'Config-Power'
 
-    if ($DeviceType -eq 'Portable') {
+    if ($FormFactor -eq 'Laptop') {
         # 1. Ecran sur batterie: 10 min
         try {
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EcranBatterie10min' -Event 'Start'
@@ -82,7 +82,7 @@ function Set-WcdPowerConfiguration {
     #     $results += [pscustomobject]@{ Step = 'VeillePCSecteurJamais'; Success = $false; Error = $_.Exception.Message }
     # }
     #
-    # if ($DeviceType -eq 'Portable') {
+    # if ($FormFactor -eq 'Laptop') {
     #     # 4. Veille PC sur batterie: Jamais (0)
     #     try {
     #         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'VeillePCBatterieJamais' -Event 'Start'
@@ -98,7 +98,7 @@ function Set-WcdPowerConfiguration {
     # }
 
     # 5. Fermeture capot: Ne rien faire (seulement si Portable)
-    if ($DeviceType -eq 'Portable') {
+    if ($FormFactor -eq 'Laptop') {
         try { # Sur secteur
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'CapotSecteurNeRienFaire' -Event 'Start'
             Invoke-WcdPowerCfg '/setacvalueindex' 'SCHEME_CURRENT' 'SUB_BUTTONS' 'LIDACTION' '0'

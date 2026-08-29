@@ -10,7 +10,7 @@
     Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER Usage
-    Mode d'utilisation du poste. Valeurs acceptees: 'Principal', 'Secondaire'.
+    Mode d'utilisation du poste. Valeurs acceptees: 'Workstation', 'Vdi'.
     Defaut: 'Principal'.
 
 .PARAMETER OpenApps
@@ -55,8 +55,8 @@ function Open-WcdInExplorer {
 function Set-WcdApplicationsConfiguration {
     [CmdletBinding()]
     param(
-        [ValidateSet('Principal', 'Secondaire')]
-        [string]$Usage = 'Principal',
+        [ValidateSet('Workstation', 'Vdi')]
+        [string]$Environment = 'Workstation',
         [bool]$OpenApps = $true,
         [string]$LogPath,
         [hashtable]$Config,
@@ -68,14 +68,14 @@ function Set-WcdApplicationsConfiguration {
     $moduleName = 'Config-Applications'
 
     if (-not $OpenApps) {
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: ouverture refusee par l utilisateur (type: $Usage)."
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: ouverture refusee par l utilisateur (type: $Environment)."
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ApplicationsSkip' -Event 'Start'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ApplicationsSkip' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'ApplicationsSkip'; Success = $true; Error = ''; Severity = 'INFO' }
         return $results
     }
 
-    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: ouverture des liens de configuration (type: $Usage)."
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message "Applications: ouverture des liens de configuration (type: $Environment)."
 
     $apps = $null
     if ($null -ne $Config) { $apps = $Config.Applications }
