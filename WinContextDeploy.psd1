@@ -157,11 +157,36 @@
     # =========================================================================
     # PRINTERS
     # =========================================================================
-    # Shared print-server queues to connect. Leave empty to skip entirely.
+    # Shared print-server queues to connect, with the built-in Add-Printer
+    # cmdlet. Each entry needs both keys:
+    #
+    #   Name        The queue name as the print server publishes it. Also what
+    #               the technician sees, and how an already-connected printer
+    #               is recognised so a second run is a no-op.
+    #   Connection  The UNC path of the queue.
     #
     #   Printers = @(
     #       @{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }
     #   )
+    #
+    # Leave the array empty and the printer Module is skipped entirely, leaving
+    # printers on the checklist as a Manual Step.
+    #
+    # Shared queues only. A direct-IP printer needs Add-PrinterPort plus a
+    # driver already in the driver store, which this does not do.
     # =========================================================================
     Printers = @()
+
+    # =========================================================================
+    # NETWORK
+    # =========================================================================
+    # PingTarget is what the connectivity test pings, from the Wi-Fi adapter.
+    # 8.8.8.8 is a reasonable default, but plenty of corporate networks drop
+    # ICMP to the internet outright and would report a false failure every run.
+    # Point this at something that answers on your network - the default
+    # gateway, or an internal host.
+    # =========================================================================
+    Network = @{
+        PingTarget = '8.8.8.8'
+    }
 }

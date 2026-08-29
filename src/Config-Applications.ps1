@@ -1,40 +1,31 @@
-<#
-.SYNOPSIS
-    Verifies and opens the Application Targets declared in the manifest.
+# Config-Applications.ps1 - verifies and opens the Application Targets.
+# Entry point: Set-WcdApplicationsConfiguration. Requires WcdHelpers.ps1.
+#
+# Adding, removing or reordering an application is a manifest edit; nothing in
+# this file needs to change for it.
 
-.DESCRIPTION
-    Walks the Applications list from WinContextDeploy.psd1 in order, running
-    each entry according to its Action. Adding, removing or reordering an
-    application is a manifest edit; this module never needs to change.
-
-    WinContextDeploy does not install software. Targets are verified and, where
-    useful, opened for the technician to check by eye.
-
-    Requires WcdHelpers.ps1 to be dot-sourced first.
-
-.PARAMETER Targets
-    Application Target entries to run, already filtered for the current
-    Environment and selected optional tools by Get-WcdApplicationTarget.
-
-.PARAMETER OpenApps
-    When $false, every target is skipped and a single ApplicationsSkip result
-    is returned. Defaults to $true.
-
-.PARAMETER LogPath
-    Full path to the log file. Resolved automatically when omitted.
-
-.PARAMETER ProgressCallback
-    Scriptblock invoked at the start and end of each step for progress display.
-
-.OUTPUTS
-    [pscustomobject[]] with Step, Success, Error and Severity.
-
-.EXAMPLE
-    $targets = Get-WcdApplicationTarget -Config $config -Environment 'Workstation'
-    Set-WcdApplicationsConfiguration -Targets $targets -LogPath 'C:\temp\log.txt'
-#>
+$script:WcdApplicationActions = @('Launch', 'OpenFolder', 'OpenUrl', 'CheckProcess', 'CheckPath')
 
 function Test-WcdTargetPresent {
+    <#
+    .SYNOPSIS
+        Reports whether an Application Target's Target can be found up front.
+
+    .DESCRIPTION
+        Only targets that look like filesystem paths are checked here. A bare
+        command such as 'ms-teams.exe' is resolved by the shell, and OpenUrl and
+        CheckProcess targets are not paths at all, so all three are reported
+        present and left for Invoke-WcdApplicationTarget to attempt.
+
+    .PARAMETER Entry
+        One Application Target entry from the manifest.
+
+    .OUTPUTS
+        [bool] $false only when a path-shaped Target does not exist.
+
+    .EXAMPLE
+        Test-WcdTargetPresent -Entry @{ Action = 'CheckPath'; Target = 'C:\Program Files\app' }
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -51,6 +42,25 @@ function Test-WcdTargetPresent {
 }
 
 function Invoke-WcdApplicationTarget {
+    <#
+    .SYNOPSIS
+        Runs one Application Target according to its Action.
+
+    .DESCRIPTION
+        The single place that knows what each Action means. An Action the manifest
+        made up throws, and the caller turns that into a remediation naming the
+        valid ones - a manifest typo should say so, not fail silently.
+
+    .PARAMETER Entry
+        One Application Target entry from the manifest.
+
+    .OUTPUTS
+        None. Throws when the target cannot be run, or is not running for
+        CheckProcess.
+
+    .EXAMPLE
+        Invoke-WcdApplicationTarget -Entry @{ Action = 'OpenUrl'; Target = 'https://example.com' }
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -73,6 +83,43 @@ function Invoke-WcdApplicationTarget {
 }
 
 function Set-WcdApplicationsConfiguration {
+    <#
+    .SYNOPSIS
+        Verifies and opens the Application Targets that apply to this machine.
+
+    .DESCRIPTION
+        Walks the already-filtered target list in manifest order, running each
+        according to its Action. Adding, removing or reordering an application is a
+        manifest edit; this Module never needs to change.
+
+        WinContextDeploy does not install software: targets are verified and, where
+        useful, opened for the technician to check by eye. An absent target that is
+        declared Optional is a note; an absent required target is a warning naming
+        the manifest key to fix.
+
+    .PARAMETER Targets
+        Application Target entries to run, already filtered for the current
+        Environment, Form Factor and selected Optional Tools by
+        Get-WcdApplicationTarget.
+
+    .PARAMETER OpenApps
+        When $false, every target is skipped and a single ApplicationsSkip result
+        is returned, which the checklist renders as Manual Steps. Defaults to $true.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Success, Error, Severity and, on a failure,
+        RemedyKey and RemedyArgs.
+
+    .EXAMPLE
+        $targets = Get-WcdApplicationTarget -Config $config -Environment 'Workstation'
+        Set-WcdApplicationsConfiguration -Targets $targets -LogPath 'C:\temp\log.txt'
+    #>
     [CmdletBinding()]
     param(
         [object[]]$Targets = @(),
@@ -106,7 +153,16 @@ function Set-WcdApplicationsConfiguration {
 
                 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $detail
                 Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $step -Event 'Finish' -Kind $kind
-                $results += [pscustomobject]@{ Step = $step; Success = $true; Error = $detail; Severity = $severity }
+                $results += [pscustomobject]@{
+                    Step       = $step
+                    Success    = $true
+                    Error      = $detail
+                    Severity   = $severity
+                    # An Optional target that is simply absent is a normal
+                    # outcome, so it gets a note but no call to action.
+                    RemedyKey  = if ($entry.Optional) { '' } else { 'TargetMissing' }
+                    RemedyArgs = @([string]$entry.Target, [string]$entry.Name)
+                }
                 continue
             }
 
@@ -122,13 +178,28 @@ function Set-WcdApplicationsConfiguration {
             $severity = if ($entry.Action -eq 'CheckProcess') { 'WARNING' } else { 'ERROR' }
             $kind     = if ($entry.Action -eq 'CheckProcess') { 'warning' } else { 'error' }
 
+            # What the technician should do next depends on why it failed, not
+            # on the text Windows happened to put in the exception.
+            if (@($script:WcdApplicationActions) -notcontains [string]$entry.Action) {
+                $remedyKey  = 'UnknownAction'
+                $remedyArgs = @([string]$entry.Action, $step, (@($script:WcdApplicationActions) -join ', '))
+            } elseif ($entry.Action -eq 'CheckProcess') {
+                $remedyKey  = 'ProcessNotRunning'
+                $remedyArgs = @([string]$entry.Name)
+            } else {
+                $remedyKey  = 'TargetLaunchFailed'
+                $remedyArgs = @([string]$entry.Target, [string]$entry.Name)
+            }
+
             Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('{0}: {1}' -f $entry.Name, $message)
             Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $step -Event 'Finish' -Kind $kind
             $results += [pscustomobject]@{
-                Step     = $step
-                Success  = ($severity -ne 'ERROR')
-                Error    = $message
-                Severity = $severity
+                Step       = $step
+                Success    = ($severity -ne 'ERROR')
+                Error      = $message
+                Severity   = $severity
+                RemedyKey  = $remedyKey
+                RemedyArgs = $remedyArgs
             }
         }
     }

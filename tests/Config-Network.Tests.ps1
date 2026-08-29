@@ -158,11 +158,11 @@ Describe 'Config-Network' {
 
         if ($script:PesterMajorVersion -ge 5) {
             $refreshResult.Severity | Should -Be 'WARNING'
-            $refreshResult.Error | Should -Match 'introuvable'
+            $refreshResult.Error | Should -Match 'not found'
             Assert-MockCalled -CommandName 'Invoke-WcdNetworkShortcut' -Times 0
         } else {
             $refreshResult.Severity | Should Be 'WARNING'
-            $refreshResult.Error | Should Match 'introuvable'
+            $refreshResult.Error | Should Match 'not found'
             Assert-MockCalled 'Invoke-WcdNetworkShortcut' 0
         }
     }

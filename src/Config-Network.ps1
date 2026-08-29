@@ -1,38 +1,49 @@
-<#
-.SYNOPSIS
-    Effectue un diagnostic reseau: inventorie les adaptateurs actifs, teste la
-    connectivite vers 8.8.8.8 via Wi-Fi, et active le raccourci
-    "Refresh My Network Places" si present.
-
-.DESCRIPTION
-    Utilise Get-NetAdapter pour lister les adaptateurs pertinents (filtre
-    Bluetooth, loopback, VPN, etc.), puis effectue un ping 8.8.8.8 avec source
-    forcee (-S) sur l'adaptateur Wi-Fi. Tente ensuite de lancer le raccourci
-    .lnk "Refresh My Network Places" depuis le profil utilisateur.
-    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
-
-.PARAMETER LogPath
-    Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-WcdLogPath.
-
-.OUTPUTS
-    [pscustomobject[]] — tableau de resultats avec Step, Success, Severity, Error.
-    Etapes possibles: NetworkAdapterStatus, NetworkPing8888, RefreshNetworkPlaces.
-#>
+# Config-Network.ps1 - network adapter inventory, connectivity test, and the
+# "Refresh My Network Places" shortcut.
+# Entry point: Set-WcdNetworkDiagnostics. Requires WcdHelpers.ps1.
+#
+# Read-only: it changes nothing and needs no elevation.
 
 function Get-WcdNetworkAdapters {
+    <#
+    .SYNOPSIS
+        Returns every network adapter Windows knows about.
+
+    .DESCRIPTION
+        Thin wrapper over Get-NetAdapter, so the inventory has a seam the tests can
+        mock and a session without the NetAdapter module fails with a clear message.
+
+    .OUTPUTS
+        [object[]] Adapter objects. Throws when Get-NetAdapter is unavailable.
+
+    .EXAMPLE
+        @(Get-WcdNetworkAdapters).Count
+    #>
     [CmdletBinding()]
     param()
 
     $command = Get-Command -Name 'Get-NetAdapter' -ErrorAction SilentlyContinue
     if (-not $command) {
-        throw 'Get-NetAdapter est indisponible sur cette session.'
+        throw 'Get-NetAdapter is unavailable in this session.'
     }
 
     return @(Get-NetAdapter -ErrorAction Stop)
 }
 
 function Test-WcdNetworkAdapterActive {
+    <#
+    .SYNOPSIS
+        Reports whether an adapter is up.
+
+    .PARAMETER Adapter
+        An adapter object.
+
+    .OUTPUTS
+        [bool] $true when its Status is Up or Connected.
+
+    .EXAMPLE
+        Test-WcdNetworkAdapterActive -Adapter $adapter
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -44,6 +55,24 @@ function Test-WcdNetworkAdapterActive {
 }
 
 function Test-WcdRelevantNetworkAdapter {
+    <#
+    .SYNOPSIS
+        Reports whether an adapter is one a technician cares about.
+
+    .DESCRIPTION
+        A freshly imaged machine carries a dozen virtual adapters - Bluetooth,
+        loopback, VPN, hypervisor, WAN miniports - that would drown the real
+        Wi-Fi and Ethernet interfaces in the summary.
+
+    .PARAMETER Adapter
+        An adapter object.
+
+    .OUTPUTS
+        [bool] $false for a virtual or auxiliary interface.
+
+    .EXAMPLE
+        Test-WcdRelevantNetworkAdapter -Adapter $adapter
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -61,6 +90,19 @@ function Test-WcdRelevantNetworkAdapter {
 }
 
 function Get-WcdActiveNetworkAdapters {
+    <#
+    .SYNOPSIS
+        Returns the adapters that are both up and relevant.
+
+    .PARAMETER Adapters
+        Adapters to filter.
+
+    .OUTPUTS
+        [object[]] The active, relevant adapters.
+
+    .EXAMPLE
+        Get-WcdActiveNetworkAdapters -Adapters (Get-WcdNetworkAdapters)
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -74,6 +116,23 @@ function Get-WcdActiveNetworkAdapters {
 }
 
 function Get-WcdWiFiAdapter {
+    <#
+    .SYNOPSIS
+        Returns the first Wi-Fi adapter, or $null.
+
+    .DESCRIPTION
+        Matches on the physical media type rather than the adapter name, which
+        varies by vendor and by display language.
+
+    .PARAMETER Adapters
+        Adapters to search.
+
+    .OUTPUTS
+        The Wi-Fi adapter, or $null when the machine has none.
+
+    .EXAMPLE
+        Get-WcdWiFiAdapter -Adapters (Get-WcdNetworkAdapters)
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -84,6 +143,23 @@ function Get-WcdWiFiAdapter {
 }
 
 function Get-WcdAdapterIPv4 {
+    <#
+    .SYNOPSIS
+        Returns an adapter's usable IPv4 address.
+
+    .DESCRIPTION
+        Link-local (169.254.x.x) and loopback addresses are ignored: an adapter
+        holding only those has no working connection to test from.
+
+    .PARAMETER Adapter
+        The adapter to read.
+
+    .OUTPUTS
+        [string] The IPv4 address, or $null.
+
+    .EXAMPLE
+        Get-WcdAdapterIPv4 -Adapter $wifiAdapter
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -101,6 +177,19 @@ function Get-WcdAdapterIPv4 {
 }
 
 function Get-WcdNetworkAdapterKind {
+    <#
+    .SYNOPSIS
+        Classifies an adapter as Wi-Fi, Ethernet or Other.
+
+    .PARAMETER Adapter
+        The adapter to classify.
+
+    .OUTPUTS
+        [string] 'Wi-Fi', 'Ethernet' or 'Other'.
+
+    .EXAMPLE
+        Get-WcdNetworkAdapterKind -Adapter $adapter
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -122,10 +211,26 @@ function Get-WcdNetworkAdapterKind {
         return 'Ethernet'
     }
 
-    return 'Autre'
+    return 'Other'
 }
 
 function Format-WcdNetworkAdapterSummary {
+    <#
+    .SYNOPSIS
+        Summarizes adapters into one readable line.
+
+    .PARAMETER Adapters
+        Adapters to summarize.
+
+    .PARAMETER Limit
+        How many to name before collapsing the rest into a count. Defaults to 3.
+
+    .OUTPUTS
+        [string] e.g. 'Wi-Fi: Wi-Fi, Ethernet: Ethernet, +1 more'.
+
+    .EXAMPLE
+        Format-WcdNetworkAdapterSummary -Adapters $active
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -143,7 +248,7 @@ function Format-WcdNetworkAdapterSummary {
             $label = [string]$_.InterfaceDescription
         }
         if ([string]::IsNullOrWhiteSpace($label)) {
-            $label = 'Adaptateur inconnu'
+            $label = 'Unknown adapter'
         }
 
         '{0}: {1}' -f (Get-WcdNetworkAdapterKind -Adapter $_), $label
@@ -151,21 +256,42 @@ function Format-WcdNetworkAdapterSummary {
 
     $summary = $preview -join ', '
     if (@($Adapters).Count -gt $Limit) {
-        $summary = '{0}, +{1} autre(s)' -f $summary, (@($Adapters).Count - $Limit)
+        $summary = '{0}, +{1} more' -f $summary, (@($Adapters).Count - $Limit)
     }
 
     return $summary
 }
 
 function Test-WcdNetworkPing {
+    <#
+    .SYNOPSIS
+        Pings a host, optionally from a chosen source address.
+
+    .DESCRIPTION
+        Uses ping.exe rather than Test-Connection because -S pins the outgoing
+        interface: with a cable plugged in, a test aimed at the Wi-Fi adapter would
+        otherwise be answered over Ethernet and pass while Wi-Fi is broken.
+
+    .PARAMETER ComputerName
+        Host to ping. Defaults to 8.8.8.8.
+
+    .PARAMETER SourceAddress
+        Local address to send from. Omit to let Windows choose.
+
+    .OUTPUTS
+        [pscustomobject] with Reachable and Detail.
+
+    .EXAMPLE
+        Test-WcdNetworkPing -ComputerName '10.0.0.1' -SourceAddress '192.168.1.100'
+    #>
     [CmdletBinding()]
     param(
         [string]$ComputerName = '8.8.8.8',
         [string]$SourceAddress
     )
 
-    # Utilise ping.exe avec -S <source> pour forcer l interface de sortie
-    # (bypass de la priorite Ethernet quand on veut tester le Wi-Fi).
+    # ping.exe with -S <source> forces the outgoing interface, so an
+    # Ethernet cable cannot answer a test aimed at the Wi-Fi adapter.
     $pingArgs = @('-n', '1', '-w', '3000')
     if (-not [string]::IsNullOrWhiteSpace($SourceAddress)) {
         $pingArgs += '-S'
@@ -196,6 +322,20 @@ function Test-WcdNetworkPing {
 }
 
 function Get-WcdRefreshNetworkPlacesShortcutPath {
+    <#
+    .SYNOPSIS
+        Finds the user's "Refresh My Network Places" shortcut.
+
+    .DESCRIPTION
+        Looks in the user's Network Shortcuts folder, by exact name first and then
+        by a looser match, since the shortcut name is localized on some images.
+
+    .OUTPUTS
+        [string] Full path to the shortcut, or $null when there is none.
+
+    .EXAMPLE
+        $shortcut = Get-WcdRefreshNetworkPlacesShortcutPath
+    #>
     [CmdletBinding()]
     param()
 
@@ -228,6 +368,19 @@ function Get-WcdRefreshNetworkPlacesShortcutPath {
 }
 
 function Invoke-WcdNetworkShortcut {
+    <#
+    .SYNOPSIS
+        Launches a network shortcut.
+
+    .PARAMETER Path
+        Full path to the .lnk file.
+
+    .OUTPUTS
+        None. Throws when the shortcut cannot be started.
+
+    .EXAMPLE
+        Invoke-WcdNetworkShortcut -Path $shortcut
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -238,15 +391,73 @@ function Invoke-WcdNetworkShortcut {
 }
 
 function Set-WcdNetworkDiagnostics {
+    <#
+    .SYNOPSIS
+        Inventories the network adapters, tests connectivity, and refreshes the
+        user's network places.
+
+    .DESCRIPTION
+        Read-only: nothing here changes the machine, so it is safe to run
+        unelevated. A blocked ping is reported as a warning rather than a hard
+        failure - plenty of corporate networks drop ICMP - and the ping target is a
+        manifest value so it can point at something that answers on your network.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER Config
+        The imported manifest. Its Network.PingTarget overrides the default target
+        of 8.8.8.8.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Success, Severity and Error, for
+        NetworkAdapterStatus, NetworkPing8888 and RefreshNetworkPlaces.
+
+    .EXAMPLE
+        Set-WcdNetworkDiagnostics -Config $config -LogPath 'C:\temp\log.txt'
+    #>
     [CmdletBinding()]
     param(
-        [string]$LogPath
+        [string]$LogPath,
+
+        [hashtable]$Config,
+
+        [scriptblock]$ProgressCallback
     )
 
     $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
+    $moduleName = 'Config-Network'
     $results = @()
     $activeAdapters = @()
     $adapterInventoryUnavailable = $false
+
+    # The ping target is a manifest value: 8.8.8.8 is blocked outright on some
+    # corporate networks, which would report a false failure every run.
+    $pingTarget = '8.8.8.8'
+    if ($null -ne $Config -and $null -ne $Config.Network -and -not [string]::IsNullOrWhiteSpace([string]$Config.Network.PingTarget)) {
+        $pingTarget = [string]$Config.Network.PingTarget
+    }
+
+    # One place that decides the progress kind from the Result just recorded,
+    # so the ten branches below never have to repeat it.
+    $finishStep = {
+        param([string]$StepKey)
+
+        $last = @($results | Where-Object { $_.Step -eq $StepKey }) | Select-Object -Last 1
+        $kind = if ($null -eq $last) { 'success' } else {
+            switch (Get-WcdResultSeverity -Result $last) {
+                'ERROR'   { 'error' }
+                'WARNING' { 'warning' }
+                default   { 'success' }
+            }
+        }
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $StepKey -Event 'Finish' -Kind $kind
+    }
+
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'NetworkAdapterStatus' -Event 'Start'
 
     try {
         $adapters = @(Get-WcdNetworkAdapters)
@@ -262,9 +473,9 @@ function Set-WcdNetworkDiagnostics {
                 Error    = ''
             }
         } else {
-            $message = 'Aucun adaptateur reseau actif pertinent detecte.'
+            $message = 'No relevant active network adapter detected.'
             if ($adapters.Count -gt 0) {
-                $message = '{0} Adaptateurs vus: {1}' -f $message, (Format-WcdNetworkAdapterSummary -Adapters $adapters)
+                $message = '{0} Adapters seen: {1}' -f $message, (Format-WcdNetworkAdapterSummary -Adapters $adapters)
             }
 
             Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
@@ -277,7 +488,7 @@ function Set-WcdNetworkDiagnostics {
         }
     } catch {
         $adapterInventoryUnavailable = $true
-        $message = 'Impossible d inventorier les adaptateurs reseau: {0}' -f $_.Exception.Message
+        $message = 'The network adapters could not be inventoried: {0}' -f $_.Exception.Message
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
         $results += [pscustomobject]@{
             Step     = 'NetworkAdapterStatus'
@@ -287,8 +498,11 @@ function Set-WcdNetworkDiagnostics {
         }
     }
 
+    & $finishStep 'NetworkAdapterStatus'
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'NetworkPing8888' -Event 'Start'
+
     if ($adapterInventoryUnavailable) {
-        $message = 'Ping 8.8.8.8 ignore: inventaire des adaptateurs reseau indisponible.'
+        $message = 'Ping {0} skipped: the network adapter inventory is unavailable.' -f $pingTarget
         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
         $results += [pscustomobject]@{
             Step     = 'NetworkPing8888'
@@ -297,7 +511,7 @@ function Set-WcdNetworkDiagnostics {
             Error    = $message
         }
     } elseif ($activeAdapters.Count -eq 0) {
-        $message = 'Ping 8.8.8.8 ignore: aucun adaptateur reseau actif pertinent detecte.'
+        $message = 'Ping {0} skipped: no relevant active network adapter detected.' -f $pingTarget
         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
         $results += [pscustomobject]@{
             Step     = 'NetworkPing8888'
@@ -306,11 +520,11 @@ function Set-WcdNetworkDiagnostics {
             Error    = $message
         }
     } else {
-        # --- Ping 8.8.8.8 via Wi-Fi (source forcee avec -S) ---
+        # --- Ping the target over Wi-Fi, source address forced with -S ---
         $wifiAdapter = Get-WcdWiFiAdapter -Adapters $adapters
 
         if ($null -eq $wifiAdapter) {
-            $message = 'Adaptateur Wi-Fi (802.11) non detecte sur ce poste. Ping Wi-Fi ignore.'
+            $message = 'No Wi-Fi (802.11) adapter detected on this machine. Wi-Fi ping skipped.'
             Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkPing8888'
@@ -320,7 +534,7 @@ function Set-WcdNetworkDiagnostics {
             }
         } elseif (-not (Test-WcdNetworkAdapterActive -Adapter $wifiAdapter)) {
             $wifiName = if (-not [string]::IsNullOrWhiteSpace($wifiAdapter.InterfaceDescription)) { $wifiAdapter.InterfaceDescription } else { $wifiAdapter.Name }
-            $message = 'Adaptateur Wi-Fi detecte ({0}) mais non actif (Status: {1}). Ping Wi-Fi ignore.' -f $wifiName, $wifiAdapter.Status
+            $message = 'Wi-Fi adapter detected ({0}) but not active (Status: {1}). Wi-Fi ping skipped.' -f $wifiName, $wifiAdapter.Status
             Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkPing8888'
@@ -333,7 +547,7 @@ function Set-WcdNetworkDiagnostics {
             $wifiName = if (-not [string]::IsNullOrWhiteSpace($wifiAdapter.InterfaceDescription)) { $wifiAdapter.InterfaceDescription } else { $wifiAdapter.Name }
 
             if ([string]::IsNullOrWhiteSpace($wifiIPv4)) {
-                $message = 'Adaptateur Wi-Fi actif ({0}) mais aucune adresse IPv4 attribuee. Ping Wi-Fi ignore.' -f $wifiName
+                $message = 'Wi-Fi adapter active ({0}) but no IPv4 address assigned. Wi-Fi ping skipped.' -f $wifiName
                 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
                 $results += [pscustomobject]@{
                     Step     = 'NetworkPing8888'
@@ -343,14 +557,14 @@ function Set-WcdNetworkDiagnostics {
                 }
             } else {
                 try {
-                    $pingResult = Test-WcdNetworkPing -ComputerName '8.8.8.8' -SourceAddress $wifiIPv4
+                    $pingResult = Test-WcdNetworkPing -ComputerName $pingTarget -SourceAddress $wifiIPv4
                     if ($pingResult.Reachable) {
                         $detail = ''
                         if (-not [string]::IsNullOrWhiteSpace($pingResult.Detail)) {
                             $detail = ' ({0})' -f $pingResult.Detail
                         }
 
-                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: ping 8.8.8.8 over Wi-Fi ({0}, source {1}) succeeded{2}.' -f $wifiName, $wifiIPv4, $detail)
+                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: ping {0} over Wi-Fi ({1}, source {2}) succeeded{3}.' -f $pingTarget, $wifiName, $wifiIPv4, $detail)
                         $results += [pscustomobject]@{
                             Step     = 'NetworkPing8888'
                             Success  = $true
@@ -358,7 +572,7 @@ function Set-WcdNetworkDiagnostics {
                             Error    = ''
                         }
                     } else {
-                        $message = 'Le ping vers 8.8.8.8 via Wi-Fi ({0}, source {1}) a echoue.' -f $wifiName, $wifiIPv4
+                        $message = 'The ping to {0} over Wi-Fi ({1}, source {2}) failed.' -f $pingTarget, $wifiName, $wifiIPv4
                         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
                         $results += [pscustomobject]@{
                             Step     = 'NetworkPing8888'
@@ -368,7 +582,7 @@ function Set-WcdNetworkDiagnostics {
                         }
                     }
                 } catch {
-                    $message = 'Le ping vers 8.8.8.8 via Wi-Fi n a pas pu etre execute: {0}' -f $_.Exception.Message
+                    $message = 'The ping to {0} over Wi-Fi could not be run: {1}' -f $pingTarget, $_.Exception.Message
                     Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
                     $results += [pscustomobject]@{
                         Step     = 'NetworkPing8888'
@@ -381,10 +595,13 @@ function Set-WcdNetworkDiagnostics {
         }
     }
 
+    & $finishStep 'NetworkPing8888'
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'RefreshNetworkPlaces' -Event 'Start'
+
     try {
         $shortcutPath = Get-WcdRefreshNetworkPlacesShortcutPath
         if ([string]::IsNullOrWhiteSpace($shortcutPath)) {
-            $message = 'Refresh My Network Places introuvable dans les raccourcis reseau de l utilisateur.'
+            $message = 'Refresh My Network Places not found in the user network shortcuts.'
             Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'RefreshNetworkPlaces'
@@ -403,7 +620,7 @@ function Set-WcdNetworkDiagnostics {
             }
         }
     } catch {
-        $message = 'Refresh My Network Places n a pas pu etre active: {0}' -f $_.Exception.Message
+        $message = 'Refresh My Network Places could not be triggered: {0}' -f $_.Exception.Message
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
         $results += [pscustomobject]@{
             Step     = 'RefreshNetworkPlaces'
@@ -412,6 +629,8 @@ function Set-WcdNetworkDiagnostics {
             Error    = $message
         }
     }
+
+    & $finishStep 'RefreshNetworkPlaces'
 
     return $results
 }

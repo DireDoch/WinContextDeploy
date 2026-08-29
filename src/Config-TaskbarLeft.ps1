@@ -1,28 +1,28 @@
-<#
-.SYNOPSIS
-    Aligne la barre des taches a gauche et desactive le bouton "Vue des taches"
-    via le registre Windows.
-
-.DESCRIPTION
-    Modifie HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced:
-    - TaskbarAl = 0 (alignement gauche)
-    - ShowTaskViewButton = 0 (bouton vue des taches masque)
-    La desactivation des Widgets (TaskbarDa) est commentee car bloquee par GPO
-    dans certains environnements gérés par GPO.
-    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
-
-.PARAMETER LogPath
-    Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-WcdLogPath.
-
-.PARAMETER ProgressCallback
-    Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
-
-.OUTPUTS
-    [pscustomobject[]] — tableau de resultats avec Step, Success, Error.
-#>
+# Config-TaskbarLeft.ps1 - aligns the taskbar left and hides the Task View button.
+# Entry point: Set-WcdTaskbarLeft. Requires WcdHelpers.ps1.
 
 function Set-WcdTaskbarLeft {
+    <#
+    .SYNOPSIS
+        Aligns the taskbar to the left and hides the Task View button.
+
+    .DESCRIPTION
+        Two HKCU writes under Explorer\Advanced, so they work unelevated. A key
+        locked by Group Policy is reported with a remediation rather than a raw
+        access-denied message.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Success, Error and, on a failure, RemedyKey.
+
+    .EXAMPLE
+        Set-WcdTaskbarLeft -LogPath 'C:\temp\log.txt'
+    #>
     [CmdletBinding()]
     param(
         [string]$LogPath,
@@ -43,12 +43,14 @@ function Set-WcdTaskbarLeft {
         $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $true; Error = '' }
     } catch {
         $note = $_.Exception.Message
+        $remedyKey = 'RegistryWriteFailed'
         if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
             $note = 'Registry key locked by GPO or access denied.'
+            $remedyKey = 'RegistryGpo'
         }
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar align: {0}" -f $note)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $false; Error = $note }
+        $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $false; Error = $note; RemedyKey = $remedyKey }
     }
 
     # 2. Desactiver les Widgets (commente: bloque par GPO dans certains environnements)
@@ -74,12 +76,14 @@ function Set-WcdTaskbarLeft {
         $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $true; Error = '' }
     } catch {
         $note = $_.Exception.Message
+        $remedyKey = 'RegistryWriteFailed'
         if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
             $note = 'Registry key locked by GPO or access denied.'
+            $remedyKey = 'RegistryGpo'
         }
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar task view: {0}" -f $note)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $false; Error = $note }
+        $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $false; Error = $note; RemedyKey = $remedyKey }
     }
 
     return $results

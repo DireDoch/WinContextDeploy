@@ -1,13 +1,85 @@
-# Invoke-WcdConfiguration.ps1
-# Script central qui charge les helpers, execute chaque module de configuration
-# et affiche un diagnostic complet avec debug.
-#
-# Usage:
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -FormFactor Laptop
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -Language en-US -FormFactor Desktop -Environment Vdi -NonInteractive
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -FormFactor Desktop -LogPath C:\temp\log.txt
-#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -HistoryLogPath D:\log.txt -LocalProjectRoot C:\Temp\WinContextDeploy
+<#
+.SYNOPSIS
+    WinContextDeploy entry point: runs every configuration Module and prints the
+    final Diagnostic.
+
+.DESCRIPTION
+    Loads the shared helpers and the manifest, asks the technician for the
+    machine context, runs each Module in order, then prints the Diagnostic
+    twice - grouped by Module, and as a flat technician's checklist.
+
+    Only the power Modules need Administrator. When the run is not elevated the
+    technician is offered the standard Windows UAC prompt; declining is fine,
+    and the power steps then report as actionable warnings rather than as
+    failures.
+
+.PARAMETER Language
+    Windows display language to apply: 'fr-CA' or 'en-US'. Prompted when omitted.
+
+.PARAMETER FormFactor
+    Machine form factor: 'Laptop' or 'Desktop'. Selects the power profile.
+    Prompted when omitted.
+
+.PARAMETER Environment
+    'Workstation' for a full local machine, 'Vdi' for a thin endpoint whose
+    applications live in a remote session. Prompted when omitted.
+
+.PARAMETER LogPath
+    Full path to this run's log file. Defaults to log.txt beside the script.
+
+.PARAMETER ConfigPath
+    Path to WinContextDeploy.psd1. Found automatically when omitted.
+
+.PARAMETER OpenApps
+    Open the Application Targets without asking. Prompted when omitted.
+
+.PARAMETER OptionalTools
+    Comma-separated names of Optional Tools to run, skipping their menu.
+
+.PARAMETER HistoryLogPath
+    Second file this run's summary block is appended to - one running record
+    across every machine configured from the same USB key.
+
+.PARAMETER LocalProjectRoot
+    Project root when the tool runs from a copy, e.g. under %TEMP%.
+
+.PARAMETER UsbSourceRoot
+    Original location the copy was taken from, for the -Usb launcher flow.
+
+.PARAMETER ReportPath
+    When given, a machine-readable JSON run summary is also written there.
+    Console output and the text log are unchanged. A report that cannot be
+    written warns without failing the run.
+
+.PARAMETER NonInteractive
+    Ask nothing: use the supplied parameters and their defaults. Also suppresses
+    the UAC prompt, since an unattended run has nobody to answer it; start the
+    process elevated if the power steps have to be applied.
+
+.PARAMETER ScriptUI
+    Language of the prompts and the Diagnostic: 'FR' or 'EN'. Defaults from the
+    system locale.
+
+.PARAMETER Elevated
+    Internal guard. Set on the relaunched process so a failed elevation can
+    never spawn another one. Do not pass it by hand.
+
+.OUTPUTS
+    None. Writes to the host, the log, and optionally the JSON report.
+    Exit code 0 on success, 2 when the history export failed.
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 `
+        -Language en-US -FormFactor Desktop -Environment Vdi -NonInteractive
+
+.EXAMPLE
+    # Collect a machine-readable summary across a fleet
+    powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 `
+        -NonInteractive -ReportPath \\fileserver\wcd\$env:COMPUTERNAME.json
+#>
 
 [CmdletBinding()]
 param(
@@ -34,13 +106,23 @@ param(
 
     [string]$UsbSourceRoot,
 
+    [string]$ReportPath,
+
     [switch]$NonInteractive,
 
     [ValidateSet('FR', 'EN')]
-    [string]$ScriptUI = 'FR'
+    [string]$ScriptUI,
+
+    # Internal guard: set on the elevated relaunch so it can only happen once.
+    [switch]$Elevated
 )
 
-# --- Table de traduction / Translation table ---
+# UI language defaults from the system locale, so one launcher serves both.
+if ([string]::IsNullOrWhiteSpace($ScriptUI)) {
+    $ScriptUI = if ((Get-UICulture).TwoLetterISOLanguageName -eq 'fr') { 'FR' } else { 'EN' }
+}
+
+# --- Translation table ---
 $T = if ($ScriptUI -eq 'EN') {
     @{
         BannerSubtitle          = 'Post-image configuration and quick device diagnostics'
@@ -68,6 +150,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Desktop        = 'Windows desktop'
             Helpdesk       = 'Helpdesk portal'
             Favorites      = 'Browser favorites'
+            Network        = 'Network adapters'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -98,23 +181,23 @@ $T = if ($ScriptUI -eq 'EN') {
         WaitEnterExport         = 'Press Enter to finish the script and export logs to the removable drive.'
         PromptLanguage          = 'Windows system language'
         PromptLanguageDesc      = '  fr-CA = French Canadian Windows interface  |  en-US = American English'
-        PromptDeviceType        = 'Device type (Portable or Bureau?)'
-        PromptDeviceDesc1       = '  Portable = laptop with battery  |  Bureau = desktop without battery'
-        PromptDeviceDesc2       = '  Affects sleep and power management settings.'
-        PromptUsage             = 'Device usage (Principal = local | Secondaire = Citrix?)'
-        PromptUsageDesc1        = '  Principal = local physical device  -> opens SAP Front End and MicroFocus files'
-        PromptUsageDesc2        = '  Secondaire = Citrix device         -> opens the Citrix Workspace download page'
+        PromptFormFactor        = 'Machine form factor'
+        PromptFormFactorDesc1   = '  Laptop = has a battery and a lid  |  Desktop = neither'
+        PromptFormFactorDesc2   = '  Selects the power profile: battery and lid-close settings.'
+        PromptEnvironment       = 'Machine environment'
+        PromptUsageDesc1        = '  Workstation = full local machine  -> checks the locally installed applications'
+        PromptUsageDesc2        = '  Citrix / VDI = thin endpoint      -> its applications live in the remote session'
         PromptOpenApps          = 'Open {0} configuration applications?'
-        PromptOpenAppsDesc1     = '  Automatically opens: Outlook, Teams, Software Center, GlobalProtect, ServiceNow.'
+        PromptOpenAppsDesc1     = '  Opens the Application Targets declared in WinContextDeploy.psd1.'
         PromptOpenAppsDesc2     = '  Answer Yes unless applications were already opened manually.'
-        PromptEngineer          = 'Engineer computer? (adds Nvidia / GPS)'
-        PromptEngineerDesc1     = '  Adds tools: Nvidia App, GPS portal.'
+        PromptEngineer          = 'Engineering workstation? (offers the optional tools)'
+        PromptEngineerDesc1     = '  Offers the extras declared Prompt in WinContextDeploy.psd1.'
         PromptEngineerDesc2     = '  Answer No for a standard device.'
         MissingModuleData       = 'No data returned by the module.'
         MissingStepTech         = 'Missing technical step: {0}'
         ApplicationManualDetail = 'Launch skipped (answered No). Manual verification required.'
         StandardManualDetail    = 'Must be done manually.'
-        SecondaryNA             = 'Not applicable on secondary device.'
+        SecondaryNA             = 'Not applicable to the chosen Form Factor or Environment.'
         DeskWindowsDetail       = 'Must be done manually on the Windows desktop.'
         StepCount               = 'step(s)'
         ModuleResult            = '  Result: {0} ({1} steps, {2} failures, {3} warnings, {4:N0}ms)'
@@ -146,6 +229,24 @@ $T = if ($ScriptUI -eq 'EN') {
         DiagFinalByModule       = '         FINAL DIAGNOSTIC - BY MODULE         '
         DiagFinalByStep         = '         FINAL DIAGNOSTIC - BY STEP           '
         LogEndSummary           = '=== Execution complete: {0} OK, {1} warning(s), {2} error(s), {3} manual, {4} N/A ==='
+        ElevationRequest        = 'The power settings need Administrator. Requesting elevation...'
+        ElevationDeclined       = 'Continuing without Administrator. The power steps will report as needing elevation.'
+        ElevationUncWarning     = '[WARNING] -HistoryLogPath points at a network share ({0}). Elevation opens a new logon session, which drops mapped drives, so the history export may fail after the relaunch.'
+        ReportWritten           = 'JSON report written to: {0}'
+        ReportFailed            = '[WARNING] JSON report could not be written to {0}. Detail: {1}'
+        # Remediation: what the technician should do next. The raw exception
+        # stays in the log; this is what goes on screen.
+        Remedy                  = @{
+            TargetMissing       = "Not found at {0}. Update Applications['{1}'].Target in WinContextDeploy.psd1, or remove the entry."
+            TargetLaunchFailed  = "Could not start {0}. Check Applications['{1}'].Target and Action in WinContextDeploy.psd1."
+            ProcessNotRunning   = 'Confirm {0} is installed and started, or mark the entry Optional in WinContextDeploy.psd1.'
+            UnknownAction       = "Unknown Action '{0}' for step '{1}'. Valid: {2}."
+            RequiresAdmin       = 'Requires Administrator. Relaunch elevated to apply.'
+            PowerCfgFailed      = 'powercfg refused the change. Check that no Group Policy pins the power plan.'
+            RegistryGpo         = "This machine's policy prevents the change; it must be applied by Group Policy instead."
+            RegistryWriteFailed = 'The registry value could not be written. Check that the key is not held by another process.'
+            PrinterUnreachable  = "Print server {0} is unreachable. Check the connection, or remove Printers['{1}'] from WinContextDeploy.psd1."
+        }
     }
 } else {
     @{
@@ -174,6 +275,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Desktop        = 'Bureau Windows'
             Helpdesk       = 'Portail de soutien'
             Favorites      = 'Favoris du navigateur'
+            Network        = 'Adaptateurs reseau'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -204,23 +306,23 @@ $T = if ($ScriptUI -eq 'EN') {
         WaitEnterExport         = 'Cliquer sur Enter pour terminer le script et envoyer les logs vers le disque amovible.'
         PromptLanguage          = 'Langue du systeme Windows'
         PromptLanguageDesc      = '  fr-CA = interface Windows en francais canadien  |  en-US = anglais americain'
-        PromptDeviceType        = 'Type de poste (Portable ou Bureau ?)'
-        PromptDeviceDesc1       = '  Portable = laptop avec batterie  |  Bureau = ordinateur fixe sans batterie'
-        PromptDeviceDesc2       = "  Affecte les parametres de veille et de gestion d energie."
-        PromptUsage             = 'Usage du poste (Principal = local | Secondaire = Citrix ?)'
+        PromptFormFactor        = 'Type de poste (Portable ou Bureau ?)'
+        PromptFormFactorDesc1   = '  Portable = laptop avec batterie  |  Bureau = ordinateur fixe sans batterie'
+        PromptFormFactorDesc2   = "  Affecte les parametres de veille et de gestion d energie."
+        PromptEnvironment       = 'Usage du poste (Principal = local | Secondaire = Citrix ?)'
         PromptUsageDesc1        = '  Principal = poste physique local  -> ouvre les fichiers de SAP Front End et MicroFocus'
         PromptUsageDesc2        = '  Secondaire = poste Citrix         -> ouvre la page de telechargement Citrix Workspace'
         PromptOpenApps          = 'Ouvrir les applications de configuration {0} ?'
-        PromptOpenAppsDesc1     = '  Ouvre automatiquement : Outlook, Teams, Software Center, GlobalProtect, ServiceNow.'
+        PromptOpenAppsDesc1     = '  Ouvre les applications declarees dans WinContextDeploy.psd1.'
         PromptOpenAppsDesc2     = '  Repondre Oui sauf si les applications ont deja ete ouvertes manuellement.'
-        PromptEngineer          = "Ordinateur d ingenieur ? (ajoute Nvidia / GPS)"
-        PromptEngineerDesc1     = '  Ajoute des outils : Nvidia App, portail GPS.'
+        PromptEngineer          = "Poste d ingenieur ? (propose les outils optionnels)"
+        PromptEngineerDesc1     = '  Propose les extras declares Prompt dans WinContextDeploy.psd1.'
         PromptEngineerDesc2     = '  Repondre Non pour un poste standard.'
         MissingModuleData       = 'Aucune donnee retournee par le module.'
         MissingStepTech         = 'Etape technique manquante: {0}'
         ApplicationManualDetail = 'Ouverture ignoree (repondu Non). Verification manuelle requise.'
         StandardManualDetail    = 'A faire manuellement.'
-        SecondaryNA             = 'Non applicable sur poste secondaire.'
+        SecondaryNA             = 'Non applicable au type de poste ou a l usage choisi.'
         DeskWindowsDetail       = 'A faire manuellement sur le bureau Windows.'
         StepCount               = 'etape(s)'
         ModuleResult            = '  Resultat: {0} ({1} etapes, {2} echecs, {3} avertissements, {4:N0}ms)'
@@ -252,10 +354,28 @@ $T = if ($ScriptUI -eq 'EN') {
         DiagFinalByModule       = '         DIAGNOSTIC FINAL - PAR MODULE         '
         DiagFinalByStep         = '         DIAGNOSTIC FINAL - PAR ETAPE          '
         LogEndSummary           = '=== Fin execution: {0} OK, {1} warning(s), {2} erreur(s), {3} manuel(le)(s), {4} N/A ==='
+        ElevationRequest        = 'Les options d alimentation exigent les droits Administrateur. Demande d elevation...'
+        ElevationDeclined       = 'Poursuite sans droits Administrateur. Les etapes d alimentation seront signalees comme exigeant une elevation.'
+        ElevationUncWarning     = '[AVERTISSEMENT] -HistoryLogPath pointe vers un partage reseau ({0}). L elevation ouvre une nouvelle session d ouverture, qui perd les lecteurs mappes: l export historique peut echouer apres le relancement.'
+        ReportWritten           = 'Rapport JSON ecrit dans: {0}'
+        ReportFailed            = '[AVERTISSEMENT] Rapport JSON impossible a ecrire dans {0}. Detail: {1}'
+        # Remediation: la prochaine action concrete pour le technicien.
+        # L exception brute reste dans le log; ceci va a l ecran.
+        Remedy                  = @{
+            TargetMissing       = "Introuvable a {0}. Corriger Applications['{1}'].Target dans WinContextDeploy.psd1, ou retirer l entree."
+            TargetLaunchFailed  = "Impossible de demarrer {0}. Verifier Applications['{1}'].Target et Action dans WinContextDeploy.psd1."
+            ProcessNotRunning   = 'Confirmer que {0} est installe et demarre, ou marquer l entree Optional dans WinContextDeploy.psd1.'
+            UnknownAction       = "Action '{0}' inconnue pour l etape '{1}'. Valides: {2}."
+            RequiresAdmin       = 'Exige les droits Administrateur. Relancer en tant qu administrateur pour appliquer.'
+            PowerCfgFailed      = 'powercfg a refuse la modification. Verifier qu aucune GPO ne fige le mode de gestion d alimentation.'
+            RegistryGpo         = 'La politique de ce poste empeche la modification; elle doit passer par une GPO.'
+            RegistryWriteFailed = 'La valeur de registre n a pas pu etre ecrite. Verifier que la cle n est pas detenue par un autre processus.'
+            PrinterUnreachable  = "Serveur d impression {0} injoignable. Verifier la connexion, ou retirer Printers['{1}'] de WinContextDeploy.psd1."
+        }
     }
 }
 
-# --- Resolution du dossier de scripts ---
+# --- Script folder resolution ---
 $scriptDir = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($scriptDir)) {
     $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
@@ -264,7 +384,7 @@ if ([string]::IsNullOrWhiteSpace($scriptDir)) {
     $scriptDir = (Get-Location).Path
 }
 
-# --- Chargement des helpers partages ---
+# --- Shared helpers ---
 $helpersPath = Join-Path $scriptDir 'WcdHelpers.ps1'
 if (-not (Test-Path -LiteralPath $helpersPath)) {
     Write-Host ($T.FatalHelpersMissing -f $scriptDir) -ForegroundColor Red
@@ -272,7 +392,7 @@ if (-not (Test-Path -LiteralPath $helpersPath)) {
 }
 . $helpersPath
 
-# --- Chargement de la configuration statique ---
+# --- Manifest ---
 try {
     $script:WcdConfig = Import-WcdConfig -ConfigPath $ConfigPath
 } catch {
@@ -281,6 +401,20 @@ try {
 }
 
 function Show-WcdBanner {
+    <#
+    .SYNOPSIS
+        Prints the startup banner.
+
+    .DESCRIPTION
+        Reads banner.txt from the project root. Art wider than the console, or a
+        missing file, falls back to a plain title rather than a wrapped mess.
+
+    .OUTPUTS
+        None. Writes to the host.
+
+    .EXAMPLE
+        Show-WcdBanner
+    #>
     [CmdletBinding()]
     param()
 
@@ -317,6 +451,34 @@ function Show-WcdBanner {
 }
 
 function Read-WcdChoice {
+    <#
+    .SYNOPSIS
+        Asks the technician to pick one option, with arrow keys.
+
+    .DESCRIPTION
+        Redraws the option line in place with a carriage return, never with
+        absolute cursor coordinates, so the prompt stays readable anywhere in the
+        buffer including after scrolling. When the input is redirected or the host
+        has no RawUI it falls back to a plain typed prompt.
+
+    .PARAMETER Prompt
+        The question to ask.
+
+    .PARAMETER Choices
+        Ordered dictionary of shortcut key -> canonical value.
+
+    .PARAMETER DefaultKey
+        Key selected when the prompt opens, and returned on a bare Enter.
+
+    .PARAMETER Description
+        Explanatory lines shown under the question.
+
+    .OUTPUTS
+        The canonical value behind the chosen key.
+
+    .EXAMPLE
+        Read-WcdChoice -Prompt 'Form factor' -Choices ([ordered]@{ L = 'Laptop'; D = 'Desktop' }) -DefaultKey 'L'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -344,8 +506,8 @@ function Read-WcdChoice {
         }
     }
 
-    # Mode texte de secours: utilise UNIQUEMENT lorsque la lecture clavier
-    # interactive n'est pas disponible (entree redirigee, hote sans RawUI).
+    # Internal fallback: used ONLY when interactive key reading is
+    # unavailable (redirected input, or a host with no RawUI).
     function Invoke-WcdChoiceFallback {
         foreach ($desc in $Description) { Write-Host $desc -ForegroundColor DarkGray }
         while ($true) {
@@ -371,10 +533,9 @@ function Read-WcdChoice {
         }
     }
 
-    # Determiner si on peut lire les fleches du clavier. On ne bascule en mode
-    # texte que si l'entree est redirigee ou si l'hote n'expose pas RawUI: la
-    # geometrie du tampon n'intervient plus, donc les questions 3-4-5 restent
-    # interactives comme la premiere.
+    # Only redirected input or a host without RawUI forces the text fallback.
+    # Buffer geometry plays no part, so every question stays as interactive as
+    # the first one, however far the console has scrolled.
     $canUseArrowKeys = $true
     try {
         if ([System.Console]::IsInputRedirected) { $canUseArrowKeys = $false }
@@ -387,14 +548,14 @@ function Read-WcdChoice {
         return Invoke-WcdChoiceFallback
     }
 
-    # Partie statique (ecrite une seule fois): question, description, aide.
+    # Static part, written once: the question, its description and the hint.
     Write-Host $Prompt -ForegroundColor Cyan
     foreach ($desc in $Description) { Write-Host $desc -ForegroundColor DarkGray }
     Write-Host $T.NavHint -ForegroundColor DarkGray
 
-    # La ligne d'options est redessinee sur place via un retour chariot (`r).
-    # Aucune coordonnee absolue n'est utilisee, donc le rendu reste fiable
-    # partout dans le tampon, y compris tout en bas (apres defilement).
+    # The option line is redrawn in place with a carriage return. No absolute
+    # coordinates are used, so the rendering stays correct anywhere in the
+    # buffer, including at the very bottom after scrolling.
     while ($true) {
         Write-Host "`r" -NoNewline
         for ($i = 0; $i -lt $entries.Count; $i++) {
@@ -416,10 +577,10 @@ function Read-WcdChoice {
         }
 
         switch ($keyInfo.VirtualKeyCode) {
-            37 { $selectedIndex = ($selectedIndex - 1 + $entries.Count) % $entries.Count }  # Gauche
-            38 { $selectedIndex = ($selectedIndex - 1 + $entries.Count) % $entries.Count }  # Haut
-            39 { $selectedIndex = ($selectedIndex + 1) % $entries.Count }                   # Droite
-            40 { $selectedIndex = ($selectedIndex + 1) % $entries.Count }                   # Bas
+            37 { $selectedIndex = ($selectedIndex - 1 + $entries.Count) % $entries.Count }  # Left
+            38 { $selectedIndex = ($selectedIndex - 1 + $entries.Count) % $entries.Count }  # Up
+            39 { $selectedIndex = ($selectedIndex + 1) % $entries.Count }                   # Right
+            40 { $selectedIndex = ($selectedIndex + 1) % $entries.Count }                   # Down
             13 {
                 Write-Host ''
                 return $entries[$selectedIndex].Value
@@ -440,6 +601,28 @@ function Read-WcdChoice {
 }
 
 function ConvertTo-WcdOptionalToolSelection {
+    <#
+    .SYNOPSIS
+        Parses a combined optional-tools answer such as "12" into its digits.
+
+    .DESCRIPTION
+        The menu lets the technician type several numbers at once. Duplicates are
+        collapsed and the result is sorted, so "21", "12" and "122" all mean the
+        same two tools. Any character outside the valid keys rejects the whole
+        answer rather than silently running a subset.
+
+    .PARAMETER RawInput
+        What the technician typed.
+
+    .PARAMETER ValidKeys
+        The keys currently on the menu.
+
+    .OUTPUTS
+        [string[]] The selected keys, or an empty array when the input is invalid.
+
+    .EXAMPLE
+        ConvertTo-WcdOptionalToolSelection -RawInput '21' -ValidKeys @('1','2','3')   # 1, 2
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -463,6 +646,19 @@ function ConvertTo-WcdOptionalToolSelection {
 }
 
 function Read-WcdOptionalToolChoice {
+    <#
+    .SYNOPSIS
+        Shows the Optional Tools menu and returns what the technician picked.
+
+    .PARAMETER Candidates
+        Prompt entries from the manifest, from Get-WcdPromptedApplicationTarget.
+
+    .OUTPUTS
+        [string[]] Names of the selected Application Targets.
+
+    .EXAMPLE
+        Read-WcdOptionalToolChoice -Candidates (Get-WcdPromptedApplicationTarget -Config $config)
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -506,6 +702,23 @@ function Read-WcdOptionalToolChoice {
 }
 
 function Wait-WcdForEnter {
+    <#
+    .SYNOPSIS
+        Waits for Enter before finishing the run.
+
+    .DESCRIPTION
+        The tool is usually double-clicked, so the window would close on the final
+        Diagnostic without this. Falls back to Read-Host when the host has no RawUI.
+
+    .PARAMETER Message
+        Prompt shown while waiting.
+
+    .OUTPUTS
+        None.
+
+    .EXAMPLE
+        Wait-WcdForEnter -Message 'Press Enter to finish the script.'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -537,6 +750,44 @@ function Wait-WcdForEnter {
 }
 
 function Resolve-WcdExecutionOptions {
+    <#
+    .SYNOPSIS
+        Resolves the machine context, prompting for whatever was not supplied.
+
+    .DESCRIPTION
+        A parameter given on the command line is never asked about again, which is
+        what makes -NonInteractive and the interactive run the same code path. The
+        Optional Tools menu is only offered when the manifest declares at least one
+        Prompt entry.
+
+    .PARAMETER SelectedLanguage
+        Windows display language, or empty to prompt.
+
+    .PARAMETER SelectedFormFactor
+        'Laptop' or 'Desktop', or empty to prompt.
+
+    .PARAMETER SelectedEnvironment
+        'Workstation' or 'Vdi', or empty to prompt.
+
+    .PARAMETER SelectedOpenApps
+        'Yes' or empty to prompt.
+
+    .PARAMETER SelectedOptionalTools
+        Comma-separated Optional Tool names, or empty to prompt.
+
+    .PARAMETER OptionalToolCandidates
+        Prompt entries available to offer.
+
+    .PARAMETER DisablePrompt
+        Ask nothing: use what was supplied, and the defaults for the rest.
+
+    .OUTPUTS
+        [pscustomobject] with Language, FormFactor, Environment, OpenApps and
+        OptionalTools.
+
+    .EXAMPLE
+        Resolve-WcdExecutionOptions -SelectedFormFactor 'Desktop' -DisablePrompt
+    #>
     [CmdletBinding()]
     param(
         [string]$SelectedLanguage,
@@ -565,13 +816,13 @@ function Resolve-WcdExecutionOptions {
 
         if (-not $deviceResult) {
             Write-Host ''
-            $deviceResult = Read-WcdChoice -Prompt $T.PromptDeviceType -Choices ([ordered]@{ $T.KeyLaptop = 'Laptop'; $T.KeyDesktop = 'Desktop' }) -DefaultKey $T.KeyLaptop `
-                -Description @($T.PromptDeviceDesc1, $T.PromptDeviceDesc2)
+            $deviceResult = Read-WcdChoice -Prompt $T.PromptFormFactor -Choices ([ordered]@{ $T.KeyLaptop = 'Laptop'; $T.KeyDesktop = 'Desktop' }) -DefaultKey $T.KeyLaptop `
+                -Description @($T.PromptFormFactorDesc1, $T.PromptFormFactorDesc2)
         }
 
         if (-not $usageResult) {
             Write-Host ''
-            $usageResult = Read-WcdChoice -Prompt $T.PromptUsage -Choices ([ordered]@{ $T.KeyWorkstation = 'Workstation'; $T.KeyVdi = 'Vdi' }) -DefaultKey $T.KeyWorkstation `
+            $usageResult = Read-WcdChoice -Prompt $T.PromptEnvironment -Choices ([ordered]@{ $T.KeyWorkstation = 'Workstation'; $T.KeyVdi = 'Vdi' }) -DefaultKey $T.KeyWorkstation `
                 -Description @($T.PromptUsageDesc1, $T.PromptUsageDesc2)
         }
 
@@ -615,8 +866,38 @@ function Resolve-WcdExecutionOptions {
     }
 }
 
-# --- Resolution des options et du log ---
+# --- Run options and log ---
 Show-WcdBanner
+
+# --- Elevation ---------------------------------------------------------------
+# Only the power steps need Administrator. Offer the standard UAC prompt once;
+# if the technician declines, or has no rights to give, the run carries on and
+# the power steps report as actionable warnings instead of failures.
+#
+# An unattended run is never prompted: a modal UAC dialog with nobody there to
+# click it is a hang, not a prompt. It degrades to the unelevated report instead.
+$isElevated = Test-WcdElevated
+if (-not $isElevated -and -not $Elevated -and -not $NonInteractive) {
+    if (Test-WcdUncPath -Path $HistoryLogPath) {
+        # UAC opens a different logon session, which drops mapped drives. A USB
+        # drive letter is physical and survives; a UNC path does not.
+        Write-Host ($T.ElevationUncWarning -f $HistoryLogPath) -ForegroundColor Yellow
+    }
+
+    Write-Host $T.ElevationRequest -ForegroundColor Cyan
+    try {
+        $relaunchArguments = Get-WcdRelaunchArgument `
+            -ScriptPath $PSCommandPath `
+            -BoundParameters $PSBoundParameters `
+            -WorkingDirectory (Get-Location).Path
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $relaunchArguments -ErrorAction Stop
+        exit 0
+    } catch {
+        # Declining UAC throws here, and so does having no admin rights at all.
+        Write-Host $T.ElevationDeclined -ForegroundColor Yellow
+    }
+}
+
 
 $resolvedLocalProjectRoot = $LocalProjectRoot
 if ([string]::IsNullOrWhiteSpace($resolvedLocalProjectRoot)) {
@@ -662,7 +943,7 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
 }
 
 Initialize-WcdLog -Path $resolvedLogPath
-Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message '=== Debut execution WinContextDeploy ==='
+Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message '=== WinContextDeploy run started ==='
 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | FormFactor: {1} | Environment: {2} | OpenApps: {3} | OptionalTools: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.FormFactor, $executionOptions.Environment, $executionOptions.OpenApps, ($executionOptions.OptionalTools -join ','), $resolvedLogPath)
 if (-not [string]::IsNullOrWhiteSpace($resolvedLocalProjectRoot)) {
     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("LocalProjectRoot: {0}" -f $resolvedLocalProjectRoot)
@@ -675,6 +956,19 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
 }
 
 function Get-WcdSeverityRank {
+    <#
+    .SYNOPSIS
+        Ranks a severity so the worst outcome can be found.
+
+    .PARAMETER Severity
+        'ERROR', 'WARNING' or anything else.
+
+    .OUTPUTS
+        [int] 3 for ERROR, 2 for WARNING, 1 otherwise.
+
+    .EXAMPLE
+        Get-WcdSeverityRank -Severity 'WARNING'   # 2
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -689,6 +983,22 @@ function Get-WcdSeverityRank {
 }
 
 function Get-WcdResultsForSteps {
+    <#
+    .SYNOPSIS
+        Collects the Results belonging to a set of Step keys.
+
+    .PARAMETER ResultLookup
+        Step key -> Results, built from the run.
+
+    .PARAMETER StepKeys
+        Step keys to collect, in order.
+
+    .OUTPUTS
+        [object[]] The matching Results. Empty when the Module did not run.
+
+    .EXAMPLE
+        Get-WcdResultsForSteps -ResultLookup $lookup -StepKeys @('ScreenTimeoutAc')
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -708,6 +1018,23 @@ function Get-WcdResultsForSteps {
 }
 
 function Get-WcdStrongestResult {
+    <#
+    .SYNOPSIS
+        Returns the worst Result in a set.
+
+    .DESCRIPTION
+        A checklist row covering several Steps takes the colour of its worst one:
+        one failed power step must not be hidden by four that worked.
+
+    .PARAMETER Results
+        Results to compare.
+
+    .OUTPUTS
+        The worst Result, or $null when they are all informational.
+
+    .EXAMPLE
+        Get-WcdStrongestResult -Results $powerResults
+    #>
     [CmdletBinding()]
     param(
         [object[]]$Results = @()
@@ -726,7 +1053,75 @@ function Get-WcdStrongestResult {
     return $strongest
 }
 
+function Format-WcdRemedy {
+    <#
+    .SYNOPSIS
+        Renders the remediation sentence carried by a Step Result.
+
+    .DESCRIPTION
+        Modules name a remedy by key, never by sentence, so the text lives in
+        the $T tables and is localized like everything else the technician
+        reads. A Result with no RemedyKey renders nothing.
+
+    .PARAMETER Result
+        A Step Result, optionally carrying RemedyKey and RemedyArgs.
+
+    .OUTPUTS
+        [string] The remediation sentence, or an empty string.
+
+    .EXAMPLE
+        Format-WcdRemedy -Result ([pscustomobject]@{ RemedyKey = 'RequiresAdmin' })
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        $Result
+    )
+
+    if ($null -eq $Result) { return '' }
+
+    $keyProperty = $Result.PSObject.Properties['RemedyKey']
+    if ($null -eq $keyProperty -or [string]::IsNullOrWhiteSpace([string]$keyProperty.Value)) { return '' }
+
+    $key = [string]$keyProperty.Value
+    if (-not $T.Remedy.ContainsKey($key)) { return '' }
+
+    $template = [string]$T.Remedy[$key]
+    $argsProperty = $Result.PSObject.Properties['RemedyArgs']
+    $remedyArgs = if ($null -ne $argsProperty) { @($argsProperty.Value) } else { @() }
+    if ($remedyArgs.Count -eq 0) { return $template }
+
+    try {
+        return ($template -f $remedyArgs)
+    } catch {
+        # A template and its arguments out of step must never break the report.
+        return $template
+    }
+}
+
 function Get-WcdAggregateDetail {
+    <#
+    .SYNOPSIS
+        Builds the detail text for a checklist row covering several Steps.
+
+    .DESCRIPTION
+        Names each Step that has something to say, followed by its remediation
+        where there is one. Purely informational Results with nothing to report are
+        left out so a healthy row stays quiet.
+
+    .PARAMETER Results
+        Results behind the row.
+
+    .PARAMETER StepLabels
+        Step key -> label.
+
+    .OUTPUTS
+        [string] The joined detail text.
+
+    .EXAMPLE
+        Get-WcdAggregateDetail -Results $results -StepLabels $labels
+    #>
     [CmdletBinding()]
     param(
         [object[]]$Results = @(),
@@ -743,17 +1138,44 @@ function Get-WcdAggregateDetail {
         }
 
         $stepLabel = if ($StepLabels.ContainsKey($result.Step)) { $StepLabels[$result.Step] } else { $result.Step }
-        if ([string]::IsNullOrWhiteSpace($result.Error)) {
-            $details += $stepLabel
-        } else {
-            $details += ('{0}: {1}' -f $stepLabel, $result.Error)
+        # What failed, then what to do about it. The raw exception stays in the
+        # log; the remediation is what the technician needs on screen.
+        $remedy = Format-WcdRemedy -Result $result
+        $text = if ([string]::IsNullOrWhiteSpace($result.Error)) { $stepLabel } else { '{0}: {1}' -f $stepLabel, $result.Error }
+        if (-not [string]::IsNullOrWhiteSpace($remedy)) {
+            $text = '{0} -> {1}' -f $text, $remedy
         }
+        $details += $text
     }
 
     return ($details -join ' | ')
 }
 
 function New-WcdDiagnosticEntry {
+    <#
+    .SYNOPSIS
+        Builds one row of the technician's checklist.
+
+    .PARAMETER Label
+        What the technician sees.
+
+    .PARAMETER Kind
+        'success', 'warning', 'error', 'manual' or 'na'.
+
+    .PARAMETER Detail
+        Extra text shown after the status, including any remediation.
+
+    .PARAMETER Step
+        Step key(s) behind the row, comma-joined when a row covers several.
+        Empty for a Manual Step, which has no Step behind it. Carried so the
+        JSON report can name the step a consumer should key on.
+
+    .OUTPUTS
+        [pscustomobject] with Step, Label, Kind and Detail.
+
+    .EXAMPLE
+        New-WcdDiagnosticEntry -Label 'Wi-Fi' -Kind 'manual' -Detail 'Must be done manually.'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -763,10 +1185,13 @@ function New-WcdDiagnosticEntry {
         [ValidateSet('success', 'warning', 'error', 'manual', 'na')]
         [string]$Kind,
 
-        [string]$Detail = ''
+        [string]$Detail = '',
+
+        [string]$Step = ''
     )
 
     return [pscustomobject]@{
+        Step   = $Step
         Label  = $Label
         Kind   = $Kind
         Detail = $Detail
@@ -774,6 +1199,40 @@ function New-WcdDiagnosticEntry {
 }
 
 function Resolve-WcdAutomaticEntry {
+    <#
+    .SYNOPSIS
+        Turns the Results of one or more Steps into a checklist row.
+
+    .DESCRIPTION
+        The row takes the worst severity found. A Step the Module never reported is
+        a warning naming the missing step, not a silent success - a Module that
+        half-ran must not read as green.
+
+    .PARAMETER Label
+        What the technician sees.
+
+    .PARAMETER ResultLookup
+        Step key -> Results.
+
+    .PARAMETER StepKeys
+        Step keys behind this row.
+
+    .PARAMETER StepLabels
+        Step key -> label.
+
+    .PARAMETER MissingKind
+        Kind used when no Result at all was produced: 'warning', 'manual' or 'na'.
+
+    .PARAMETER MissingDetail
+        Detail used in that case.
+
+    .OUTPUTS
+        [pscustomobject] one checklist entry.
+
+    .EXAMPLE
+        Resolve-WcdAutomaticEntry -Label 'Power options' -ResultLookup $lookup `
+            -StepKeys @('ScreenTimeoutAc') -StepLabels $labels
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -795,9 +1254,10 @@ function Resolve-WcdAutomaticEntry {
 
     if ([string]::IsNullOrWhiteSpace($MissingDetail)) { $MissingDetail = $T.MissingModuleData }
 
+    $stepId = (@($StepKeys) -join ',')
     $results = @(Get-WcdResultsForSteps -ResultLookup $ResultLookup -StepKeys $StepKeys)
     if ($results.Count -eq 0) {
-        return New-WcdDiagnosticEntry -Label $Label -Kind $MissingKind -Detail $MissingDetail
+        return New-WcdDiagnosticEntry -Label $Label -Kind $MissingKind -Detail $MissingDetail -Step $stepId
     }
 
     $missingStepKeys = @($StepKeys | Where-Object { -not $ResultLookup.ContainsKey($_) })
@@ -805,24 +1265,41 @@ function Resolve-WcdAutomaticEntry {
     $severity = Get-WcdResultSeverity -Result $strongest
 
     if ($severity -eq 'ERROR') {
-        return New-WcdDiagnosticEntry -Label $Label -Kind 'error' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels)
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'error' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels) -Step $stepId
     }
 
     if ($severity -eq 'WARNING') {
-        return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels)
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels) -Step $stepId
     }
 
     if ($missingStepKeys.Count -gt 0) {
         $missingLabels = @($missingStepKeys | ForEach-Object {
             if ($StepLabels.ContainsKey($_)) { $StepLabels[$_] } else { $_ }
         })
-        return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail ($T.MissingStepTech -f ($missingLabels -join ', '))
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail ($T.MissingStepTech -f ($missingLabels -join ', ')) -Step $stepId
     }
 
-    return New-WcdDiagnosticEntry -Label $Label -Kind 'success'
+    # A Step can succeed and still have something to say - an Optional target
+    # that is simply absent is a note, not a warning, and the technician still
+    # needs to see it.
+    return New-WcdDiagnosticEntry -Label $Label -Kind 'success' -Step $stepId `
+        -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels)
 }
 
 function Get-WcdModuleStatusKind {
+    <#
+    .SYNOPSIS
+        Maps a Module's status word to a diagnostic kind.
+
+    .PARAMETER Status
+        The localized status word from the per-module table.
+
+    .OUTPUTS
+        [string] 'success', 'warning' or 'error'.
+
+    .EXAMPLE
+        Get-WcdModuleStatusKind -Status 'OK'   # success
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -837,6 +1314,19 @@ function Get-WcdModuleStatusKind {
 }
 
 function Format-WcdModuleLine {
+    <#
+    .SYNOPSIS
+        Renders one row of the per-Module diagnostic.
+
+    .PARAMETER ModuleStatus
+        A module status object: Module, Status, Etapes, Detail.
+
+    .OUTPUTS
+        [string] The rendered line.
+
+    .EXAMPLE
+        Format-WcdModuleLine -ModuleStatus $moduleStatus[0]
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -854,6 +1344,19 @@ function Format-WcdModuleLine {
 }
 
 function Format-WcdChecklistLine {
+    <#
+    .SYNOPSIS
+        Renders one row of the technician's checklist.
+
+    .PARAMETER Entry
+        A checklist entry: Label, Kind, Detail.
+
+    .OUTPUTS
+        [string] The rendered line.
+
+    .EXAMPLE
+        Format-WcdChecklistLine -Entry $entry
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -870,6 +1373,19 @@ function Format-WcdChecklistLine {
 }
 
 function Write-WcdSectionHeader {
+    <#
+    .SYNOPSIS
+        Prints a boxed section header.
+
+    .PARAMETER Title
+        The section title.
+
+    .OUTPUTS
+        None. Writes to the host.
+
+    .EXAMPLE
+        Write-WcdSectionHeader -Title 'FINAL DIAGNOSTIC - BY STEP'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -883,6 +1399,39 @@ function Write-WcdSectionHeader {
 }
 
 function Get-WcdFinalChecklistEntries {
+    <#
+    .SYNOPSIS
+        Builds the technician's checklist: every Step, in the order it was run.
+
+    .DESCRIPTION
+        The one place the run is turned into what the technician reads, and the
+        source the JSON report is built from, so the two can never disagree.
+
+        An Application Target filtered out by the current Environment or Form
+        Factor is reported Not Applicable rather than omitted, so it is visible
+        that it was considered. Targets skipped because the technician declined the
+        prompt become Manual Steps. Printers are automatic when the manifest
+        declares queues and a Manual Step when it does not.
+
+    .PARAMETER AllResults
+        Every Result produced by the run.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options, used to pick the Steps that apply.
+
+    .PARAMETER StepLabels
+        Step key -> label.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Label, Kind and Detail.
+
+    .EXAMPLE
+        Get-WcdFinalChecklistEntries -AllResults $results -ExecutionOptions $options `
+            -StepLabels $labels -Config $config
+    #>
     [CmdletBinding()]
     param(
         [object[]]$AllResults = @(),
@@ -925,6 +1474,8 @@ function Get-WcdFinalChecklistEntries {
         -StepKeys $powerStepKeys -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup `
         -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Network -ResultLookup $lookup `
+        -StepKeys @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') -StepLabels $StepLabels
 
     # --- Application Targets, in manifest order -------------------------------
     # Targets excluded by the current Environment are reported Not Applicable
@@ -942,12 +1493,12 @@ function Get-WcdFinalChecklistEntries {
         if (@($selected) -notcontains $step) {
             # Prompt entries the technician declined are simply not shown.
             if ($entry.Prompt) { continue }
-            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'na' -Detail $T.SecondaryNA
+            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'na' -Detail $T.SecondaryNA -Step $step
             continue
         }
 
         if ($applicationsSkipped) {
-            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'manual' -Detail $T.ApplicationManualDetail
+            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'manual' -Detail $T.ApplicationManualDetail -Step $step
             continue
         }
 
@@ -955,16 +1506,28 @@ function Get-WcdFinalChecklistEntries {
             -StepKeys @($step) -StepLabels $StepLabels
     }
 
+    # --- Printers ------------------------------------------------------------
+    # Declared in the manifest: the Module connects them and reports per queue.
+    # None declared: they stay a Manual Step, as they were before.
+    $printerTargets = @(Get-WcdPrinterTarget -Config $Config)
+    if ($printerTargets.Count -gt 0) {
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Printers -ResultLookup $lookup `
+            -StepKeys @($printerTargets | ForEach-Object { Get-WcdPrinterStepKey -Name ([string]$_.Name) }) `
+            -StepLabels $StepLabels
+    }
+
     # --- Deliberately manual: WinContextDeploy does not automate these --------
-    foreach ($manualLabel in @(
+    $manualLabels = @(
         $T.Checklist.Signature,
         $T.Checklist.Wifi,
         $T.Checklist.NetworkDrives,
         $T.Checklist.Sync,
-        $T.Checklist.Printers,
         $T.Checklist.Desktop,
         $T.Checklist.Favorites
-    )) {
+    )
+    if ($printerTargets.Count -eq 0) { $manualLabels += $T.Checklist.Printers }
+
+    foreach ($manualLabel in $manualLabels) {
         $entries += New-WcdDiagnosticEntry -Label $manualLabel -Kind 'manual' -Detail $T.StandardManualDetail
     }
 
@@ -972,6 +1535,28 @@ function Get-WcdFinalChecklistEntries {
 }
 
 function Get-WcdFinalDiagnosticLines {
+    <#
+    .SYNOPSIS
+        Renders the whole final Diagnostic as plain text lines.
+
+    .DESCRIPTION
+        Same content as the console output, without colour, for the history log.
+
+    .PARAMETER ModuleStatus
+        Per-Module rollup rows.
+
+    .PARAMETER ChecklistEntries
+        The technician's checklist entries.
+
+    .PARAMETER SummaryLine
+        The one-line count summary.
+
+    .OUTPUTS
+        [string[]] The rendered Diagnostic.
+
+    .EXAMPLE
+        Get-WcdFinalDiagnosticLines -ModuleStatus $moduleStatus -ChecklistEntries $entries -SummaryLine $summary
+    #>
     [CmdletBinding()]
     param(
         [object[]]$ModuleStatus = @(),
@@ -1005,14 +1590,16 @@ function Get-WcdFinalDiagnosticLines {
     return $lines
 }
 
-# --- Liste des modules a executer ---
+# --- Modules to run, in order ---
 $modules = @(
     @{ Name = 'Config-Power';         File = 'Config-Power.ps1' },
     @{ Name = 'Config-Decimal';       File = 'Config-Decimal.ps1' },
     @{ Name = 'Config-TaskbarLeft';   File = 'Config-TaskbarLeft.ps1' },
     @{ Name = 'Config-Language';      File = 'Config-Language.ps1' },
     @{ Name = 'Config-Applications';  File = 'Config-Applications.ps1' },
-    @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' }
+    @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' },
+    @{ Name = 'Config-Network';       File = 'Config-Network.ps1' },
+    @{ Name = 'Config-Printer';       File = 'Config-Printer.ps1' }
 )
 
 $stepLabels = Get-WcdTechnicalStepLabels -Config $script:WcdConfig
@@ -1024,7 +1611,13 @@ foreach ($mod in $modules) {
     $modPath = Join-Path $scriptDir $mod.File
     $modName = $mod.Name
 
-    # Verification que le fichier module existe
+    # Nothing planned means nothing declared in the manifest: skip the Module
+    # entirely rather than report an empty run of it.
+    if ($moduleStepPlan.ContainsKey($modName) -and @($moduleStepPlan[$modName]).Count -eq 0) {
+        continue
+    }
+
+    # The module file must exist
     if (-not (Test-Path -LiteralPath $modPath)) {
         $msg = ($T.ModuleNotFound -f $modPath)
         Write-Host "  [ERREUR] $msg" -ForegroundColor Red
@@ -1040,7 +1633,7 @@ foreach ($mod in $modules) {
         continue
     }
 
-    # Chargement du module (dot-source)
+    # Load the module (dot-source)
     try {
         . $modPath
     } catch {
@@ -1058,7 +1651,7 @@ foreach ($mod in $modules) {
         continue
     }
 
-    # Execution du module
+    # Run the module
     $modResults = @()
     $modError = $null
     $startTime = Get-Date
@@ -1072,7 +1665,7 @@ foreach ($mod in $modules) {
     try {
         switch ($modName) {
             'Config-Power' {
-                $modResults = @(Set-WcdPowerConfiguration -FormFactor $executionOptions.FormFactor -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdPowerConfiguration -FormFactor $executionOptions.FormFactor -Elevated $isElevated -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Decimal' {
                 $modResults = @(Set-WcdDecimalConfiguration -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
@@ -1093,6 +1686,12 @@ foreach ($mod in $modules) {
             'Config-DeviceManager' {
                 $modResults = @(Set-WcdDeviceManagerStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
+            'Config-Network' {
+                $modResults = @(Set-WcdNetworkDiagnostics -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+            }
+            'Config-Printer' {
+                $modResults = @(Set-WcdPrinterConfiguration -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+            }
         }
     } catch {
         $modError = $_.Exception.Message
@@ -1101,7 +1700,7 @@ foreach ($mod in $modules) {
 
     $duration = (Get-Date) - $startTime
 
-    # Comptage des resultats
+    # Count the results
     $totalSteps = $modResults.Count
     $failedSteps = @($modResults | Where-Object { (Get-WcdResultSeverity -Result $_) -eq 'ERROR' }).Count
     $warningSteps = @($modResults | Where-Object { (Get-WcdResultSeverity -Result $_) -eq 'WARNING' }).Count
@@ -1181,6 +1780,31 @@ Write-Host ($T.LogOutput -f $resolvedLogPath) -ForegroundColor Gray
 Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ($T.LogEndSummary -f $checklistSuccessCount, $checklistWarningCount, $checklistErrorCount, $checklistManualCount, $checklistNaCount)
 
 $finalizationExitCode = 0
+
+# --- Machine-readable run summary -------------------------------------------
+# Built from the entries the technician just saw, so the JSON and the console
+# can never disagree. Failing to write it warns and carries on, like the
+# history export: a fleet collector is not worth losing a run over.
+if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
+    try {
+        $reportParent = Split-Path -Path $ReportPath -Parent
+        if (-not [string]::IsNullOrWhiteSpace($reportParent) -and -not (Test-Path -LiteralPath $reportParent)) {
+            New-Item -Path $reportParent -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        }
+
+        $report = New-WcdRunReport -ChecklistEntries $checklistEntries -ExecutionOptions $executionOptions -Elevated $isElevated
+        # Depth 5: the default of 2 silently flattens steps into type names.
+        $report | ConvertTo-Json -Depth 5 | Set-Content -Path $ReportPath -Encoding UTF8 -ErrorAction Stop
+
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('JSON report written to: {0}' -f $ReportPath)
+        Write-Host ($T.ReportWritten -f $ReportPath) -ForegroundColor Gray
+    } catch {
+        $reportError = $_.Exception.Message
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('JSON report failed: {0}' -f $reportError)
+        Write-Host ($T.ReportFailed -f $ReportPath, $reportError) -ForegroundColor Yellow
+    }
+}
+
 Write-Host ''
 
 if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {

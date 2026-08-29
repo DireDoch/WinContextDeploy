@@ -53,12 +53,12 @@ Describe 'Config-DeviceManager' {
             $result.Success | Should -BeTrue
             $result.Severity | Should -Be 'WARNING'
             $result.Error | Should -Match 'Bluetooth Adapter|USB Dock'
-            Get-Content -Path $logPath -Raw | Should -Match 'Warnings Device Manager detectes'
+            Get-Content -Path $logPath -Raw | Should -Match 'Device Manager warnings detected'
         } else {
             $result.Success | Should Be $true
             $result.Severity | Should Be 'WARNING'
             $result.Error | Should Match 'Bluetooth Adapter|USB Dock'
-            Get-Content -Path $logPath -Raw | Should Match 'Warnings Device Manager detectes'
+            Get-Content -Path $logPath -Raw | Should Match 'Device Manager warnings detected'
         }
     }
 
@@ -77,12 +77,12 @@ Describe 'Config-DeviceManager' {
             $result.Success | Should -BeTrue
             $result.Severity | Should -Be 'INFO'
             $result.Error | Should -Be ''
-            Get-Content -Path $logPath -Raw | Should -Match 'peripherique ignore selon exception connue'
+            Get-Content -Path $logPath -Raw | Should -Match 'device ignored by a known exception'
         } else {
             $result.Success | Should Be $true
             $result.Severity | Should Be 'INFO'
             $result.Error | Should Be ''
-            Get-Content -Path $logPath -Raw | Should Match 'peripherique ignore selon exception connue'
+            Get-Content -Path $logPath -Raw | Should Match 'device ignored by a known exception'
         }
     }
 

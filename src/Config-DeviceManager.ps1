@@ -1,27 +1,23 @@
-<#
-.SYNOPSIS
-    Inspecte le Gestionnaire de peripheriques via Win32_PnPEntity et signale
-    les peripheriques ayant un ConfigManagerErrorCode non nul.
-
-.DESCRIPTION
-    Interroge WMI/CIM pour obtenir tous les peripheriques Plug-and-Play.
-    Les codes d'erreur sont classes WARNING ou ERROR selon leur valeur.
-    Certains peripheriques connus (ex: PANGP code 22) sont ignores par
-    exception explicite pour eviter les faux positifs.
-    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
-
-.PARAMETER LogPath
-    Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-WcdLogPath.
-
-.PARAMETER ProgressCallback
-    Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
-
-.OUTPUTS
-    [pscustomobject] — resultat unique avec Step, Success, Severity, Error.
-#>
+# Config-DeviceManager.ps1 - reports the devices Windows cannot configure.
+# Entry point: Set-WcdDeviceManagerStatus. Requires WcdHelpers.ps1.
+#
+# Read-only: it inspects Win32_PnPEntity and changes nothing.
 
 function Get-WcdPnPDevices {
+    <#
+    .SYNOPSIS
+        Returns every Plug-and-Play device known to Windows.
+
+    .DESCRIPTION
+        Thin wrapper over the Win32_PnPEntity CIM class, so the inventory has a
+        seam the tests can mock.
+
+    .OUTPUTS
+        [object[]] Win32_PnPEntity instances. Throws when CIM cannot be queried.
+
+    .EXAMPLE
+        @(Get-WcdPnPDevices).Count
+    #>
     [CmdletBinding()]
     param()
 
@@ -29,6 +25,25 @@ function Get-WcdPnPDevices {
 }
 
 function Get-WcdDeviceManagerCodeInfo {
+    <#
+    .SYNOPSIS
+        Maps a ConfigManagerErrorCode to a severity and a readable label.
+
+    .DESCRIPTION
+        Codes meaning "will resolve itself" - a pending reboot, a device not
+        currently connected - are warnings. Codes meaning a driver is missing or
+        broken are errors. An unknown code is treated as an error rather than
+        quietly passed over.
+
+    .PARAMETER Code
+        A non-zero ConfigManagerErrorCode.
+
+    .OUTPUTS
+        [hashtable] with Severity and Label.
+
+    .EXAMPLE
+        (Get-WcdDeviceManagerCodeInfo -Code 28).Severity   # ERROR
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -36,22 +51,43 @@ function Get-WcdDeviceManagerCodeInfo {
     )
 
     switch ($Code) {
-        14 { return @{ Severity = 'WARNING'; Label = 'Redemarrage requis pour finaliser le peripherique.' } }
-        24 { return @{ Severity = 'WARNING'; Label = 'Peripherique non present ou configuration incomplete.' } }
-        45 { return @{ Severity = 'WARNING'; Label = 'Peripherique actuellement non connecte.' } }
-        47 { return @{ Severity = 'WARNING'; Label = 'Peripherique en attente de suppression ou de redemarrage.' } }
-        1  { return @{ Severity = 'ERROR'; Label = 'Peripherique non configure correctement.' } }
-        3  { return @{ Severity = 'ERROR'; Label = 'Pilote probablement endommage ou absent.' } }
-        10 { return @{ Severity = 'ERROR'; Label = 'Le peripherique ne peut pas demarrer.' } }
-        18 { return @{ Severity = 'ERROR'; Label = 'Le pilote doit etre reinstalle.' } }
-        28 { return @{ Severity = 'ERROR'; Label = 'Aucun pilote installe pour ce peripherique.' } }
-        31 { return @{ Severity = 'ERROR'; Label = 'Windows ne peut pas charger les pilotes requis.' } }
-        43 { return @{ Severity = 'ERROR'; Label = 'Le peripherique a signale une erreur et a ete arrete.' } }
-        default { return @{ Severity = 'ERROR'; Label = 'Probleme detecte par le Gestionnaire de peripheriques.' } }
+        14 { return @{ Severity = 'WARNING'; Label = 'A restart is needed to finish configuring the device.' } }
+        24 { return @{ Severity = 'WARNING'; Label = 'Device not present, or its configuration is incomplete.' } }
+        45 { return @{ Severity = 'WARNING'; Label = 'Device is not currently connected.' } }
+        47 { return @{ Severity = 'WARNING'; Label = 'Device is waiting on removal or a restart.' } }
+        1  { return @{ Severity = 'ERROR'; Label = 'Device is not configured correctly.' } }
+        3  { return @{ Severity = 'ERROR'; Label = 'Driver is probably damaged or missing.' } }
+        10 { return @{ Severity = 'ERROR'; Label = 'Device cannot start.' } }
+        18 { return @{ Severity = 'ERROR'; Label = 'Driver must be reinstalled.' } }
+        28 { return @{ Severity = 'ERROR'; Label = 'No driver installed for this device.' } }
+        31 { return @{ Severity = 'ERROR'; Label = 'Windows cannot load the required drivers.' } }
+        43 { return @{ Severity = 'ERROR'; Label = 'Device reported a problem and was stopped.' } }
+        default { return @{ Severity = 'ERROR'; Label = 'Device Manager reported a problem.' } }
     }
 }
 
 function Test-WcdIgnoredDeviceManagerIssue {
+    <#
+    .SYNOPSIS
+        Reports whether a device problem is a known false positive.
+
+    .DESCRIPTION
+        The GlobalProtect virtual adapter reports code 22 on a healthy machine.
+        Only that exact name and code pair is ignored, so no genuine Device Manager
+        problem is ever masked.
+
+    .PARAMETER DeviceName
+        Device name as reported by Windows.
+
+    .PARAMETER Code
+        Its ConfigManagerErrorCode.
+
+    .OUTPUTS
+        [bool] $true when the problem should not be reported.
+
+    .EXAMPLE
+        Test-WcdIgnoredDeviceManagerIssue -DeviceName 'PANGP Virtual Ethernet Adapter' -Code 22
+    #>
     [CmdletBinding()]
     param(
         [string]$DeviceName,
@@ -59,14 +95,29 @@ function Test-WcdIgnoredDeviceManagerIssue {
         [int]$Code
     )
 
-    # Exception
-    # remonte frequemment en code 22 sans impact operationnel pour le poste.
-    # On ignore uniquement ce nom precis combine au code 22 afin de ne pas masquer
-    # d'autres erreurs ou avertissements legitimes du Gestionnaire de peripheriques.
+    # The GlobalProtect virtual adapter reports code 22 on a perfectly healthy
+    # machine. Only that exact name and code pair is ignored, so no genuine
+    # Device Manager problem is ever masked.
     return ($Code -eq 22 -and $DeviceName -like 'PANGP Virtual Ethernet Adapter*')
 }
 
 function Format-WcdDeviceManagerSummary {
+    <#
+    .SYNOPSIS
+        Summarizes problem devices into one readable line.
+
+    .PARAMETER Devices
+        Problem devices, each with Name and Code.
+
+    .PARAMETER Limit
+        How many to name before collapsing the rest into a count. Defaults to 3.
+
+    .OUTPUTS
+        [string] e.g. 'Unknown device (code 28), +2 more'.
+
+    .EXAMPLE
+        Format-WcdDeviceManagerSummary -Devices $problems -Limit 3
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -81,13 +132,36 @@ function Format-WcdDeviceManagerSummary {
 
     $summary = $preview -join ', '
     if (@($Devices).Count -gt $Limit) {
-        $summary = '{0}, +{1} autre(s)' -f $summary, (@($Devices).Count - $Limit)
+        $summary = '{0}, +{1} more' -f $summary, (@($Devices).Count - $Limit)
     }
 
     return $summary
 }
 
 function Set-WcdDeviceManagerStatus {
+    <#
+    .SYNOPSIS
+        Reports the devices Windows cannot configure.
+
+    .DESCRIPTION
+        Reads every Plug-and-Play device and reports those with a non-zero
+        ConfigManagerErrorCode, classified as a warning or an error by code. A
+        freshly imaged machine missing a driver is exactly what this catches.
+
+        Read-only: nothing here changes the machine, and it needs no elevation.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject] with Step, Success, Severity and Error.
+
+    .EXAMPLE
+        Set-WcdDeviceManagerStatus -LogPath 'C:\temp\log.txt'
+    #>
     [CmdletBinding()]
     param(
         [string]$LogPath,
@@ -101,7 +175,7 @@ function Set-WcdDeviceManagerStatus {
     try {
         $devices = @(Get-WcdPnPDevices)
     } catch {
-        $note = 'Impossible d interroger le Gestionnaire de peripheriques via CIM: {0}' -f $_.Exception.Message
+        $note = 'Device Manager could not be queried through CIM: {0}' -f $_.Exception.Message
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $note
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'error'
 
@@ -130,11 +204,11 @@ function Set-WcdDeviceManagerStatus {
             $deviceName = $device.PNPDeviceID
         }
         if ([string]::IsNullOrWhiteSpace($deviceName)) {
-            $deviceName = 'Peripherique sans nom'
+            $deviceName = 'Unnamed device'
         }
 
         if (Test-WcdIgnoredDeviceManagerIssue -DeviceName $deviceName -Code $code) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Device Manager: peripherique ignore selon exception connue: {0} (code {1}).' -f $deviceName, $code)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Device Manager: device ignored by a known exception: {0} (code {1}).' -f $deviceName, $code)
             continue
         }
 
@@ -156,7 +230,7 @@ function Set-WcdDeviceManagerStatus {
             $warningSummary = ' | Warnings: {0}' -f (Format-WcdDeviceManagerSummary -Devices $warningDevices)
         }
 
-        $message = 'Erreurs Device Manager detectees ({0}): {1}{2}' -f $errorDevices.Count, $errorSummary, $warningSummary
+        $message = 'Device Manager errors detected ({0}): {1}{2}' -f $errorDevices.Count, $errorSummary, $warningSummary
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'error'
 
@@ -169,7 +243,7 @@ function Set-WcdDeviceManagerStatus {
     }
 
     if ($warningDevices.Count -gt 0) {
-        $message = 'Warnings Device Manager detectes ({0}): {1}' -f $warningDevices.Count, (Format-WcdDeviceManagerSummary -Devices $warningDevices)
+        $message = 'Device Manager warnings detected ({0}): {1}' -f $warningDevices.Count, (Format-WcdDeviceManagerSummary -Devices $warningDevices)
         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerStatus' -Event 'Finish' -Kind 'warning'
 

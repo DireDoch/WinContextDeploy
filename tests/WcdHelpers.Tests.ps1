@@ -147,4 +147,112 @@ Describe 'WcdHelpers' {
         # aucune table fournie: retournee telle quelle
         Get-WcdChoiceLabel -Value 'Laptop' | Should -Be 'Laptop'
     }
+
+    It 'reserialise les chemins en absolu pour la relance elevee' {
+        # Un processus eleve demarre dans System32: un chemin relatif ne
+        # retrouverait plus ses propres fichiers.
+        $bound = @{
+            LogPath        = 'logs\run.txt'
+            HistoryLogPath = (Join-Path $TestDrive 'history.txt')
+            FormFactor     = 'Desktop'
+            NonInteractive = [switch]$true
+        }
+
+        $arguments = Get-WcdRelaunchArgument -ScriptPath 'src\Invoke-WcdConfiguration.ps1' `
+            -BoundParameters $bound -WorkingDirectory $TestDrive
+
+        $arguments[0] | Should -Be '-NoProfile'
+        $arguments | Should -Contain '-File'
+        # le script et chaque chemin sont absolus
+        ($arguments -join ' ') | Should -Match ([regex]::Escape((Join-Path $TestDrive 'src')))
+        ($arguments -join ' ') | Should -Match ([regex]::Escape((Join-Path $TestDrive 'logs')))
+        $arguments | Should -Not -Contain 'logs\run.txt'
+        # les valeurs simples passent telles quelles
+        $arguments | Should -Contain '-FormFactor'
+        $arguments | Should -Contain 'Desktop'
+        # un switch passe nu, sans valeur
+        $arguments | Should -Contain '-NonInteractive'
+        $arguments | Should -Not -Contain 'True'
+    }
+
+    It 'ajoute toujours le garde -Elevated une seule fois' {
+        $arguments = Get-WcdRelaunchArgument -ScriptPath 'run.ps1' `
+            -BoundParameters @{ Elevated = [switch]$true; ScriptUI = 'EN' } -WorkingDirectory $TestDrive
+
+        @($arguments | Where-Object { $_ -eq '-Elevated' }).Count | Should -Be 1
+    }
+
+    It 'reconnait un chemin UNC qui ne survivrait pas a l elevation' {
+        Test-WcdUncPath -Path '\\fileserver\logs\history.txt' | Should -BeTrue
+        Test-WcdUncPath -Path 'E:\log.txt' | Should -BeFalse
+        Test-WcdUncPath -Path '' | Should -BeFalse
+    }
+
+    It 'derive une cle d etape stable par imprimante' {
+        Get-WcdPrinterStepKey -Name 'Floor-4-Colour' | Should -Be 'PrinterFloor4Colour'
+        # une entree sans nom exploitable garde une cle valide
+        Get-WcdPrinterStepKey -Name '---' | Should -Be 'PrinterQueue'
+    }
+
+    It 'ne retient que les imprimantes completement declarees' {
+        $config = @{ Printers = @(
+            @{ Name = 'Complete'; Connection = '\\srv\Complete' }
+            @{ Name = 'Sans connexion' }
+            @{ Connection = '\\srv\Sans-Nom' }
+        ) }
+
+        $targets = @(Get-WcdPrinterTarget -Config $config)
+
+        $targets.Count | Should -Be 1
+        $targets[0].Name | Should -Be 'Complete'
+    }
+
+    It 'produit un rapport JSON qui fait l aller-retour sans aplatir les etapes' {
+        $entries = @(
+            [pscustomobject]@{ Step = 'AppErpClient'; Label = 'ERP client'; Kind = 'warning'; Detail = 'not found at C:\nope' }
+            [pscustomobject]@{ Step = 'DisplayLanguage'; Label = 'Display language'; Kind = 'success'; Detail = '' }
+            [pscustomobject]@{ Step = ''; Label = 'Wi-Fi'; Kind = 'manual'; Detail = 'Must be done manually.' }
+            [pscustomobject]@{ Step = 'AppCadViewer'; Label = 'CAD viewer'; Kind = 'na'; Detail = 'Not applicable.' }
+        )
+        $options = [pscustomobject]@{ Language = 'fr-CA'; FormFactor = 'Laptop'; Environment = 'Workstation' }
+
+        $report = New-WcdRunReport -ChecklistEntries $entries -ExecutionOptions $options -Elevated $false
+        # Depth 5: la profondeur par defaut de 2 aplatirait steps en noms de type
+        $json = $report | ConvertTo-Json -Depth 5
+        $parsed = $json | ConvertFrom-Json
+
+        $parsed.schemaVersion | Should -Be 1
+        $parsed.timestamp | Should -Not -BeNullOrEmpty
+        $parsed.context.formFactor | Should -Be 'Laptop'
+        $parsed.context.environment | Should -Be 'Workstation'
+        $parsed.context.language | Should -Be 'fr-CA'
+        $parsed.context.elevated | Should -BeFalse
+        $parsed.summary.ok | Should -Be 1
+        $parsed.summary.warning | Should -Be 1
+        $parsed.summary.error | Should -Be 0
+        $parsed.summary.manual | Should -Be 1
+        $parsed.summary.notApplicable | Should -Be 1
+        @($parsed.steps).Count | Should -Be 4
+        ($parsed.steps | Where-Object step -eq 'AppErpClient').kind | Should -Be 'warning'
+        ($parsed.steps | Where-Object step -eq 'AppErpClient').name | Should -Be 'ERP client'
+        ($parsed.steps | Where-Object step -eq 'AppErpClient').detail | Should -Match 'not found'
+    }
+
+    It 'planifie la progression des modules reseau et imprimante' {
+        $config = @{
+            Applications = @(@{ Step = 'AppOne'; Name = 'One'; Action = 'Launch'; Target = 'a.exe' })
+            Printers     = @(@{ Name = 'Floor-4-Colour'; Connection = '\\srv\Floor-4-Colour' })
+        }
+        $executionOptions = [pscustomobject]@{
+            FormFactor = 'Laptop'; Environment = 'Workstation'; OpenApps = $true; OptionalTools = @()
+        }
+
+        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $config
+
+        $plan['Config-Network'] | Should -Be @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
+        $plan['Config-Printer'] | Should -Be @('PrinterFloor4Colour')
+        # sans imprimante declaree, le module n a rien a faire
+        $emptyPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config @{ Printers = @() }
+        @($emptyPlan['Config-Printer']).Count | Should -Be 0
+    }
 }

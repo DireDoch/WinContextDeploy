@@ -13,95 +13,116 @@ Describe 'Config-Printer' {
         $script:PesterMajorVersion = (Get-Module -Name Pester | Select-Object -First 1).Version.Major
     }
 
-    It 'ne fait rien quand AddPrinter est false' {
-        $logPath = Join-Path $TestDrive 'log_printer_skip.txt'
+    It 'ne fait rien quand aucune imprimante n est declaree' {
+        $logPath = Join-Path $TestDrive 'log_printer_empty.txt'
 
-        Mock -CommandName 'Open-WcdPrinterTool' {}
+        Mock -CommandName 'Get-WcdPrinter' {}
+        Mock -CommandName 'Add-WcdPrinterConnection' {}
 
-        $result = Set-WcdPrinterConfiguration -AddPrinter $false -LogPath $logPath
+        $results = @(Set-WcdPrinterConfiguration -Config @{ Printers = @() } -LogPath $logPath)
 
-        if ($script:PesterMajorVersion -ge 5) {
-            $result.Step | Should -Be 'PrinterSkip'
-            $result.Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Open-WcdPrinterTool' -Times 0
-        } else {
-            $result.Step | Should Be 'PrinterSkip'
-            $result.Success | Should Be $true
-            Assert-MockCalled 'Open-WcdPrinterTool' 0
-        }
+        $results.Count | Should -Be 0
+        Assert-MockCalled -CommandName 'Add-WcdPrinterConnection' -Times 0
     }
 
-    It 'ouvre Find and add Printer quand present' {
-        $logPath = Join-Path $TestDrive 'log_printer_ok.txt'
-        $fakePrinterPath = Join-Path $TestDrive 'Find and add Printer.lnk'
-        New-Item -Path $fakePrinterPath -ItemType File -Force | Out-Null
+    It 'connecte une file partagee absente du poste' {
+        $logPath = Join-Path $TestDrive 'log_printer_add.txt'
 
-        Mock -CommandName 'Open-WcdPrinterTool' {}
+        Mock -CommandName 'Get-WcdPrinter' { $null }
+        Mock -CommandName 'Add-WcdPrinterConnection' {}
 
-        $config = @{
-            Printer = @{
-                PrintManagerPath = $fakePrinterPath
-            }
-        }
+        $config = @{ Printers = @(@{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }) }
+        $results = @(Set-WcdPrinterConfiguration -Config $config -LogPath $logPath)
 
-        $result = Set-WcdPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
-
-        if ($script:PesterMajorVersion -ge 5) {
-            $result.Step | Should -Be 'PrinterAdd'
-            $result.Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Open-WcdPrinterTool' -Times 1
-        } else {
-            $result.Step | Should Be 'PrinterAdd'
-            $result.Success | Should Be $true
-            Assert-MockCalled 'Open-WcdPrinterTool' 1
-        }
+        $results.Count | Should -Be 1
+        $results[0].Step | Should -Be 'PrinterFloor4Colour'
+        $results[0].Success | Should -BeTrue
+        $results[0].Severity | Should -Be 'INFO'
+        Assert-MockCalled -CommandName 'Add-WcdPrinterConnection' -Times 1 -ParameterFilter { $ConnectionName -eq '\\printserver\Floor-4-Colour' }
+        Get-Content -Path $logPath -Raw | Should -Match 'connected via'
     }
 
-    It 'retourne une erreur quand le raccourci est introuvable' {
-        $logPath = Join-Path $TestDrive 'log_printer_missing.txt'
+    It 'est idempotent: une imprimante deja connectee n est pas reconnectee' {
+        $logPath = Join-Path $TestDrive 'log_printer_idempotent.txt'
 
-        Mock -CommandName 'Open-WcdPrinterTool' {}
+        Mock -CommandName 'Get-WcdPrinter' { [pscustomobject]@{ Name = 'Floor-4-Colour' } }
+        Mock -CommandName 'Add-WcdPrinterConnection' {}
 
-        $config = @{
-            Printer = @{
-                PrintManagerPath = (Join-Path $TestDrive 'nonexistent_printer.lnk')
-            }
-        }
+        $config = @{ Printers = @(@{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }) }
+        $results = @(Set-WcdPrinterConfiguration -Config $config -LogPath $logPath)
 
-        $result = Set-WcdPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
-
-        if ($script:PesterMajorVersion -ge 5) {
-            $result.Step | Should -Be 'PrinterAdd'
-            $result.Success | Should -BeFalse
-            $result.Error | Should -Match 'introuvable'
-        } else {
-            $result.Step | Should Be 'PrinterAdd'
-            $result.Success | Should Be $false
-            $result.Error | Should Match 'introuvable'
-        }
+        $results[0].Success | Should -BeTrue
+        $results[0].Severity | Should -Be 'INFO'
+        Assert-MockCalled -CommandName 'Add-WcdPrinterConnection' -Times 0
+        Get-Content -Path $logPath -Raw | Should -Match 'already connected'
     }
 
-    It 'retourne une erreur quand le lancement echoue' {
-        $logPath = Join-Path $TestDrive 'log_printer_error.txt'
-        $fakePrinterPath = Join-Path $TestDrive 'FindPrinterError.lnk'
-        New-Item -Path $fakePrinterPath -ItemType File -Force | Out-Null
+    It 'avertit sans planter quand le serveur d impression est injoignable' {
+        $logPath = Join-Path $TestDrive 'log_printer_unreachable.txt'
 
-        Mock -CommandName 'Open-WcdPrinterTool' { throw 'Acces refuse' }
+        Mock -CommandName 'Get-WcdPrinter' { $null }
+        Mock -CommandName 'Add-WcdPrinterConnection' { throw 'The network path was not found.' }
 
-        $config = @{
-            Printer = @{
-                PrintManagerPath = $fakePrinterPath
-            }
+        $config = @{ Printers = @(@{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }) }
+        $results = @(Set-WcdPrinterConfiguration -Config $config -LogPath $logPath)
+
+        $results.Count | Should -Be 1
+        $results[0].Severity | Should -Be 'WARNING'
+        # un serveur injoignable est un avertissement actionnable, pas un echec dur
+        $results[0].Success | Should -BeTrue
+        $results[0].RemedyKey | Should -Be 'PrinterUnreachable'
+        $results[0].Error | Should -Match 'network path'
+    }
+
+    It 'ignore une entree de manifeste incomplete' {
+        $logPath = Join-Path $TestDrive 'log_printer_incomplete.txt'
+
+        Mock -CommandName 'Get-WcdPrinter' { $null }
+        Mock -CommandName 'Add-WcdPrinterConnection' {}
+
+        $config = @{ Printers = @(
+            @{ Name = 'Sans connexion' }
+            @{ Connection = '\\printserver\Sans-Nom' }
+            @{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }
+        ) }
+        $results = @(Set-WcdPrinterConfiguration -Config $config -LogPath $logPath)
+
+        $results.Count | Should -Be 1
+        $results[0].Step | Should -Be 'PrinterFloor4Colour'
+    }
+
+    It 'rapporte chaque file separement' {
+        $logPath = Join-Path $TestDrive 'log_printer_multiple.txt'
+
+        Mock -CommandName 'Get-WcdPrinter' { $null }
+        Mock -CommandName 'Add-WcdPrinterConnection' {
+            if ($ConnectionName -match 'Broken') { throw 'The network path was not found.' }
         }
 
-        $result = Set-WcdPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
+        $config = @{ Printers = @(
+            @{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }
+            @{ Name = 'Broken-Queue';   Connection = '\\printserver\Broken-Queue' }
+        ) }
+        $results = @(Set-WcdPrinterConfiguration -Config $config -LogPath $logPath)
 
-        if ($script:PesterMajorVersion -ge 5) {
-            $result.Success | Should -BeFalse
-            $result.Error | Should -Match 'Acces refuse'
-        } else {
-            $result.Success | Should Be $false
-            $result.Error | Should Match 'Acces refuse'
-        }
+        $results.Count | Should -Be 2
+        ($results | Where-Object Step -eq 'PrinterFloor4Colour').Severity | Should -Be 'INFO'
+        ($results | Where-Object Step -eq 'PrinterBrokenQueue').Severity | Should -Be 'WARNING'
+    }
+
+    It 'signale la progression pour chaque file' {
+        $logPath = Join-Path $TestDrive 'log_printer_progress.txt'
+
+        Mock -CommandName 'Get-WcdPrinter' { $null }
+        Mock -CommandName 'Add-WcdPrinterConnection' {}
+
+        $events = [System.Collections.ArrayList]::new()
+        $callback = { param($eventData) [void]$events.Add(('{0}:{1}' -f $eventData.Step, $eventData.Event)) }.GetNewClosure()
+
+        $config = @{ Printers = @(@{ Name = 'Floor-4-Colour'; Connection = '\\printserver\Floor-4-Colour' }) }
+        Set-WcdPrinterConfiguration -Config $config -LogPath $logPath -ProgressCallback $callback | Out-Null
+
+        $events | Should -Contain 'PrinterFloor4Colour:Start'
+        $events | Should -Contain 'PrinterFloor4Colour:Finish'
     }
 }

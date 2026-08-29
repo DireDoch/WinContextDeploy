@@ -1,139 +1,126 @@
-<#
-.SYNOPSIS
-    Configure les parametres d'alimentation Windows: timeout ecran (batterie et
-    secteur), action fermeture capot, et activation du profil actif.
-
-.DESCRIPTION
-    Utilise powercfg.exe pour appliquer les timeouts ecran et les actions sur
-    fermeture du capot. Les etapes de veille (standby-timeout) sont volontairement
-    desactivees car bloquees par GPO dans l'environnement cible.
-    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
-
-.PARAMETER DeviceType
-    Type de machine. Valeurs acceptees: 'Laptop', 'Desktop'.
-    Les etapes batterie et capot sont ignorees pour les postes de type 'Bureau'.
-    Defaut: 'Portable'.
-
-.PARAMETER LogPath
-    Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-WcdLogPath.
-
-.PARAMETER ProgressCallback
-    Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
-
-.OUTPUTS
-    [pscustomobject[]] — tableau de resultats avec Step, Success, Error.
-#>
+# Config-Power.ps1 - screen timeouts, lid-close action, and the active scheme.
+# Entry point: Set-WcdPowerConfiguration. Requires WcdHelpers.ps1.
+#
+# The only Module that needs Administrator. Unelevated, it reports what would
+# have needed it rather than failing.
 
 function Set-WcdPowerConfiguration {
+    <#
+    .SYNOPSIS
+        Applies the screen timeouts, the lid-close action and the active power scheme.
+
+    .DESCRIPTION
+        Drives powercfg.exe from a step table. The battery and lid steps apply to a
+        Laptop only; on a Desktop they are Not Applicable, not skipped.
+
+        The sleep steps (standby-timeout-*) are deliberately left out - they are
+        blocked by Group Policy in the environments this tool was built for. The
+        commented rows in the step table are what to restore if that changes.
+
+        powercfg needs Administrator. An unelevated run attempts nothing: every
+        step reports as a warning saying to relaunch elevated, which is a far more
+        useful diagnostic than five raw exit codes.
+
+    .PARAMETER FormFactor
+        'Laptop' or 'Desktop'. Battery and lid steps apply to a Laptop only.
+        Defaults to 'Laptop'.
+
+    .PARAMETER Elevated
+        Whether the run holds Administrator rights. When $false no powercfg call is
+        attempted. Defaults to $true.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Success, Error and, on a failure, Severity
+        and RemedyKey.
+
+    .EXAMPLE
+        Set-WcdPowerConfiguration -FormFactor 'Laptop' -LogPath 'C:\temp\log.txt'
+
+    .EXAMPLE
+        # Unelevated: reports what would need Administrator instead of failing
+        Set-WcdPowerConfiguration -FormFactor 'Desktop' -Elevated $false
+    #>
     [CmdletBinding()]
     param(
         [ValidateSet('Laptop', 'Desktop')]
         [string]$FormFactor = 'Laptop',
+
+        [bool]$Elevated = $true,
+
         [string]$LogPath,
+
         [scriptblock]$ProgressCallback
     )
 
     $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $results = @()
     $moduleName = 'Config-Power'
+    $laptopOnly = ($FormFactor -eq 'Laptop')
 
-    if ($FormFactor -eq 'Laptop') {
-        # 1. Ecran sur batterie: 10 min
+    $steps = @(
+        @{ Step = 'ScreenTimeoutBattery'; LaptopOnly = $true;  Log = 'Power: screen timeout on battery set to 10 min.'; Fail = 'Screen timeout on battery'
+           Arguments = @('/change', 'monitor-timeout-dc', '10') }
+
+        @{ Step = 'ScreenTimeoutAc';      LaptopOnly = $false; Log = 'Power: screen timeout on AC set to 15 min.';      Fail = 'Screen timeout on AC'
+           Arguments = @('/change', 'monitor-timeout-ac', '15') }
+
+        # BLOCKED BY GPO: the standby-timeout steps are deliberately disabled.
+        # @{ Step = 'SleepAcNever';      LaptopOnly = $false; Log = 'Power: sleep on AC set to never.';      Fail = 'Sleep on AC'
+        #    Arguments = @('/change', 'standby-timeout-ac', '0') }
+        # @{ Step = 'SleepBatteryNever'; LaptopOnly = $true;  Log = 'Power: sleep on battery set to never.'; Fail = 'Sleep on battery'
+        #    Arguments = @('/change', 'standby-timeout-dc', '0') }
+
+        @{ Step = 'LidActionAcNone';      LaptopOnly = $true;  Log = 'Power: lid close on AC set to do nothing.';      Fail = 'Lid close on AC'
+           Arguments = @('/setacvalueindex', 'SCHEME_CURRENT', 'SUB_BUTTONS', 'LIDACTION', '0') }
+
+        @{ Step = 'LidActionBatteryNone'; LaptopOnly = $true;  Log = 'Power: lid close on battery set to do nothing.'; Fail = 'Lid close on battery'
+           Arguments = @('/setdcvalueindex', 'SCHEME_CURRENT', 'SUB_BUTTONS', 'LIDACTION', '0') }
+
+        @{ Step = 'SetActiveSchemeCurrent'; LaptopOnly = $false; Log = 'Power: active scheme applied.'; Fail = 'Apply active scheme'
+           Arguments = @('/setactive', 'SCHEME_CURRENT') }
+    )
+
+    foreach ($step in $steps) {
+        if ($step.LaptopOnly -and -not $laptopOnly) { continue }
+
+        $key = [string]$step.Step
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Start'
+
+        if (-not $Elevated) {
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('{0}: skipped, powercfg requires Administrator.' -f $step.Fail)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Finish' -Kind 'warning'
+            $results += [pscustomobject]@{
+                Step      = $key
+                Success   = $true
+                Error     = 'powercfg requires Administrator.'
+                Severity  = 'WARNING'
+                RemedyKey = 'RequiresAdmin'
+            }
+            continue
+        }
+
         try {
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ScreenTimeoutBattery' -Event 'Start'
-            Invoke-WcdPowerCfg '/change' 'monitor-timeout-dc' 10
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: screen timeout on battery set to 10 min.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ScreenTimeoutBattery' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'ScreenTimeoutBattery'; Success = $true; Error = '' }
+            $powerCfgArguments = @($step.Arguments)
+            Invoke-WcdPowerCfg @powerCfgArguments
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ([string]$step.Log)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Finish' -Kind 'success'
+            $results += [pscustomobject]@{ Step = $key; Success = $true; Error = '' }
         } catch {
-            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Screen timeout on battery: {0}" -f $_.Exception.Message)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ScreenTimeoutBattery' -Event 'Finish' -Kind 'error'
-            $results += [pscustomobject]@{ Step = 'ScreenTimeoutBattery'; Success = $false; Error = $_.Exception.Message }
+            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('{0}: {1}' -f $step.Fail, $_.Exception.Message)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Finish' -Kind 'error'
+            $results += [pscustomobject]@{
+                Step      = $key
+                Success   = $false
+                Error     = $_.Exception.Message
+                RemedyKey = 'PowerCfgFailed'
+            }
         }
-    }
-
-    # 2. Ecran sur secteur: 15 min
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ScreenTimeoutAc' -Event 'Start'
-        Invoke-WcdPowerCfg '/change' 'monitor-timeout-ac' 15
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: screen timeout on AC set to 15 min.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ScreenTimeoutAc' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'ScreenTimeoutAc'; Success = $true; Error = '' }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Screen timeout on AC: {0}" -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ScreenTimeoutAc' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'ScreenTimeoutAc'; Success = $false; Error = $_.Exception.Message }
-    }
-
-    # BLOQUE PAR GPO: steps standby-timeout-* desactives volontairement.
-    # Pour reactivation future, decommenter les blocs SleepAcNever/SleepBatteryNever ci-dessous.
-    #
-    # # 3. Veille PC sur secteur: Jamais (0)
-    # try {
-    #     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SleepAcNever' -Event 'Start'
-    #     Invoke-WcdPowerCfg '/change' 'standby-timeout-ac' 0
-    #     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: sleep on AC set to never.'
-    #     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SleepAcNever' -Event 'Finish' -Kind 'success'
-    #     $results += [pscustomobject]@{ Step = 'SleepAcNever'; Success = $true; Error = '' }
-    # } catch {
-    #     Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Sleep on AC: {0}" -f $_.Exception.Message)
-    #     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SleepAcNever' -Event 'Finish' -Kind 'error'
-    #     $results += [pscustomobject]@{ Step = 'SleepAcNever'; Success = $false; Error = $_.Exception.Message }
-    # }
-    #
-    # if ($FormFactor -eq 'Laptop') {
-    #     # 4. Veille PC sur batterie: Jamais (0)
-    #     try {
-    #         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SleepBatteryNever' -Event 'Start'
-    #         Invoke-WcdPowerCfg '/change' 'standby-timeout-dc' 0
-    #         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: sleep on battery set to never.'
-    #         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SleepBatteryNever' -Event 'Finish' -Kind 'success'
-    #         $results += [pscustomobject]@{ Step = 'SleepBatteryNever'; Success = $true; Error = '' }
-    #     } catch {
-    #         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Sleep on battery: {0}" -f $_.Exception.Message)
-    #         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SleepBatteryNever' -Event 'Finish' -Kind 'error'
-    #         $results += [pscustomobject]@{ Step = 'SleepBatteryNever'; Success = $false; Error = $_.Exception.Message }
-    #     }
-    # }
-
-    # 5. Fermeture capot: Ne rien faire (seulement si Portable)
-    if ($FormFactor -eq 'Laptop') {
-        try { # Sur secteur
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LidActionAcNone' -Event 'Start'
-            Invoke-WcdPowerCfg '/setacvalueindex' 'SCHEME_CURRENT' 'SUB_BUTTONS' 'LIDACTION' '0'
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: lid close on AC set to do nothing.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LidActionAcNone' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'LidActionAcNone'; Success = $true; Error = '' }
-        } catch {
-            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Lid close on AC: {0}" -f $_.Exception.Message)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LidActionAcNone' -Event 'Finish' -Kind 'error'
-            $results += [pscustomobject]@{ Step = 'LidActionAcNone'; Success = $false; Error = $_.Exception.Message }
-        }
-        try { # Sur batterie
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LidActionBatteryNone' -Event 'Start'
-            Invoke-WcdPowerCfg '/setdcvalueindex' 'SCHEME_CURRENT' 'SUB_BUTTONS' 'LIDACTION' '0'
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: lid close on battery set to do nothing.'
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LidActionBatteryNone' -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = 'LidActionBatteryNone'; Success = $true; Error = '' }
-        } catch {
-            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Lid close on battery: {0}" -f $_.Exception.Message)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LidActionBatteryNone' -Event 'Finish' -Kind 'error'
-            $results += [pscustomobject]@{ Step = 'LidActionBatteryNone'; Success = $false; Error = $_.Exception.Message }
-        }
-    }
-
-    # 6. Appliquer le profil actif
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SetActiveSchemeCurrent' -Event 'Start'
-        Invoke-WcdPowerCfg '/setactive' 'SCHEME_CURRENT'
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Power: active scheme applied.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SetActiveSchemeCurrent' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'SetActiveSchemeCurrent'; Success = $true; Error = '' }
-    } catch {
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Apply active scheme: {0}" -f $_.Exception.Message)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SetActiveSchemeCurrent' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'SetActiveSchemeCurrent'; Success = $false; Error = $_.Exception.Message }
     }
 
     return $results

@@ -1,31 +1,26 @@
-<#
-.SYNOPSIS
-    Configure la langue d'affichage Windows et le clavier par defaut
-    selon la culture cible (fr-CA ou en-US).
-
-.DESCRIPTION
-    Applique la liste de langues Windows, remplace la methode de saisie par defaut,
-    et configure la culture, la region et les parametres regionaux systeme.
-    Certaines commandes (Set-WinSystemLocale, Set-WinHomeLocation) peuvent
-    necessiter des privileges administrateur.
-    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
-
-.PARAMETER Culture
-    Code de culture cible. Valeurs acceptees: 'fr-CA', 'en-US'.
-    Defaut: 'fr-CA'.
-
-.PARAMETER LogPath
-    Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-WcdLogPath.
-
-.PARAMETER ProgressCallback
-    Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
-
-.OUTPUTS
-    [pscustomobject[]] — tableau de resultats avec Step, Success, Error.
-#>
+# Config-Language.ps1 - applies the display language and keyboard layout.
+# Entry point: Set-WcdLanguageConfiguration. Requires WcdHelpers.ps1.
 
 function Get-WcdLanguageProfile {
+    <#
+    .SYNOPSIS
+        Returns everything that differs between the supported cultures.
+
+    .DESCRIPTION
+        One table instead of conditionals scattered through the Module: the
+        culture, its fallbacks, the geographic id, the keyboard input tip, and the
+        labels used in the log.
+
+    .PARAMETER Culture
+        'fr-CA' or 'en-US'.
+
+    .OUTPUTS
+        [pscustomobject] with Culture, FallbackCultures, GeoId, KeyboardTip,
+        LanguageLabel and KeyboardLabel.
+
+    .EXAMPLE
+        (Get-WcdLanguageProfile -Culture 'fr-CA').KeyboardTip   # 0C0C:00001009
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -58,6 +53,28 @@ function Get-WcdLanguageProfile {
 }
 
 function New-WcdLanguageList {
+    <#
+    .SYNOPSIS
+        Builds the Windows user language list for a culture and its fallbacks.
+
+    .DESCRIPTION
+        fr-CA falls back to fr-FR so applications shipping only European French
+        still show a French interface rather than reverting to English.
+
+    .PARAMETER Culture
+        Primary culture, first in the resulting list.
+
+    .PARAMETER FallbackCultures
+        Cultures appended after the primary one. The primary culture and empty
+        entries are ignored.
+
+    .OUTPUTS
+        The Windows user language list object. Throws when the language cmdlets are
+        unavailable in this session.
+
+    .EXAMPLE
+        New-WcdLanguageList -Culture 'fr-CA' -FallbackCultures @('fr-FR')
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -68,7 +85,7 @@ function New-WcdLanguageList {
 
     $command = Get-Command -Name 'New-WinUserLanguageList' -ErrorAction SilentlyContinue
     if (-not $command) {
-        throw 'Commande New-WinUserLanguageList indisponible sur cette session.'
+        throw 'New-WinUserLanguageList is unavailable in this session.'
     }
 
     $languageList = New-WinUserLanguageList -Language $Culture -ErrorAction Stop
@@ -91,6 +108,19 @@ function New-WcdLanguageList {
 }
 
 function Set-WcdLanguageList {
+    <#
+    .SYNOPSIS
+        Applies a Windows user language list.
+
+    .PARAMETER LanguageList
+        The list built by New-WcdLanguageList.
+
+    .OUTPUTS
+        None. Throws when the language cmdlets are unavailable in this session.
+
+    .EXAMPLE
+        Set-WcdLanguageList -LanguageList (New-WcdLanguageList -Culture 'en-US')
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -99,13 +129,31 @@ function Set-WcdLanguageList {
 
     $command = Get-Command -Name 'Set-WinUserLanguageList' -ErrorAction SilentlyContinue
     if (-not $command) {
-        throw 'Commande Set-WinUserLanguageList indisponible sur cette session.'
+        throw 'Set-WinUserLanguageList is unavailable in this session.'
     }
 
     Set-WinUserLanguageList -LanguageList $LanguageList -Force -ErrorAction Stop -WarningAction SilentlyContinue
 }
 
 function Set-WcdKeyboardOverride {
+    <#
+    .SYNOPSIS
+        Sets the default keyboard input method.
+
+    .DESCRIPTION
+        Separate from the language list on purpose: a fr-CA display language with a
+        US keyboard is a common and confusing post-image state, so the layout is
+        pinned explicitly.
+
+    .PARAMETER InputTip
+        Input method tip, e.g. '0C0C:00001009' for Canadian French.
+
+    .OUTPUTS
+        None. Throws when the language cmdlets are unavailable in this session.
+
+    .EXAMPLE
+        Set-WcdKeyboardOverride -InputTip '0409:00000409'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -114,13 +162,38 @@ function Set-WcdKeyboardOverride {
 
     $command = Get-Command -Name 'Set-WinDefaultInputMethodOverride' -ErrorAction SilentlyContinue
     if (-not $command) {
-        throw 'Commande Set-WinDefaultInputMethodOverride indisponible sur cette session.'
+        throw 'Set-WinDefaultInputMethodOverride is unavailable in this session.'
     }
 
     Set-WinDefaultInputMethodOverride -InputTip $InputTip -ErrorAction Stop -WarningAction SilentlyContinue
 }
 
 function Set-WcdLocaleOverrides {
+    <#
+    .SYNOPSIS
+        Applies the UI language, user culture, system locale and home region.
+
+    .DESCRIPTION
+        Each cmdlet is optional: an older Windows or a locked-down session simply
+        logs a warning and the rest still applies. Set-WinSystemLocale and
+        Set-WinHomeLocation need Administrator, so an unelevated run logs them as
+        not applied instead of failing the Step.
+
+    .PARAMETER Culture
+        Culture to apply, e.g. 'fr-CA'.
+
+    .PARAMETER GeoId
+        Windows geographic id for the home region, e.g. 39 for Canada.
+
+    .PARAMETER LogPath
+        Full path to the log file.
+
+    .OUTPUTS
+        None.
+
+    .EXAMPLE
+        Set-WcdLocaleOverrides -Culture 'fr-CA' -GeoId 39 -LogPath 'C:\temp\log.txt'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -152,7 +225,7 @@ function Set-WcdLocaleOverrides {
         try {
             Set-WinSystemLocale -SystemLocale $Culture -ErrorAction Stop -WarningAction SilentlyContinue
         } catch {
-            Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinSystemLocale non applique ({0}). Executer en administrateur si necessaire.' -f $_.Exception.Message)
+            Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinSystemLocale not applied ({0}). Relaunch elevated if it is needed.' -f $_.Exception.Message)
         }
     } else {
         Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinSystemLocale unavailable: system locale not applied.'
@@ -163,7 +236,7 @@ function Set-WcdLocaleOverrides {
         try {
             Set-WinHomeLocation -GeoId $GeoId -ErrorAction Stop
         } catch {
-            Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinHomeLocation non applique ({0}).' -f $_.Exception.Message)
+            Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinHomeLocation not applied ({0}).' -f $_.Exception.Message)
         }
     } else {
         Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinHomeLocation unavailable: region not applied.'
@@ -171,6 +244,34 @@ function Set-WcdLocaleOverrides {
 }
 
 function Set-WcdLanguageConfiguration {
+    <#
+    .SYNOPSIS
+        Applies the Windows display language and the default keyboard layout.
+
+    .DESCRIPTION
+        Applies the language list, the input method and the locale overrides for
+        the chosen culture. Everything here writes per-user state, so the Module
+        runs unelevated; only the system locale and home region need Administrator
+        and are logged as not applied when it is missing.
+
+        Some UWP applications only pick the new language up after a sign-out.
+
+    .PARAMETER Culture
+        Target culture: 'fr-CA' or 'en-US'. Defaults to 'fr-CA'.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Success and Error, for DisplayLanguage and
+        KeyboardLayout.
+
+    .EXAMPLE
+        Set-WcdLanguageConfiguration -Culture 'en-US' -LogPath 'C:\temp\log.txt'
+    #>
     [CmdletBinding()]
     param(
         [ValidateSet('fr-CA', 'en-US')]
