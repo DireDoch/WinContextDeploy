@@ -8,11 +8,11 @@
     Les codes d'erreur sont classes WARNING ou ERROR selon leur valeur.
     Certains peripheriques connus (ex: PANGP code 22) sont ignores par
     exception explicite pour eviter les faux positifs.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .PARAMETER ProgressCallback
     Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
@@ -21,14 +21,14 @@
     [pscustomobject] — resultat unique avec Step, Success, Severity, Error.
 #>
 
-function Get-MinimalPnPDevices {
+function Get-WcdPnPDevices {
     [CmdletBinding()]
     param()
 
     return @(Get-CimInstance -ClassName 'Win32_PnPEntity' -ErrorAction Stop)
 }
 
-function Get-MinimalDeviceManagerCodeInfo {
+function Get-WcdDeviceManagerCodeInfo {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -51,7 +51,7 @@ function Get-MinimalDeviceManagerCodeInfo {
     }
 }
 
-function Test-MinimalIgnoredDeviceManagerIssue {
+function Test-WcdIgnoredDeviceManagerIssue {
     [CmdletBinding()]
     param(
         [string]$DeviceName,
@@ -66,7 +66,7 @@ function Test-MinimalIgnoredDeviceManagerIssue {
     return ($Code -eq 22 -and $DeviceName -like 'PANGP Virtual Ethernet Adapter*')
 }
 
-function Format-MinimalDeviceManagerSummary {
+function Format-WcdDeviceManagerSummary {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -87,23 +87,23 @@ function Format-MinimalDeviceManagerSummary {
     return $summary
 }
 
-function Set-MinimalDeviceManagerStatus {
+function Set-WcdDeviceManagerStatus {
     [CmdletBinding()]
     param(
         [string]$LogPath,
         [scriptblock]$ProgressCallback
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $moduleName = 'Config-DeviceManager'
-    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Start'
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Start'
 
     try {
-        $devices = @(Get-MinimalPnPDevices)
+        $devices = @(Get-WcdPnPDevices)
     } catch {
         $note = 'Impossible d interroger le Gestionnaire de peripheriques via CIM: {0}' -f $_.Exception.Message
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $note
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $note
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'error'
 
         return [pscustomobject]@{
             Step     = 'DeviceManagerEtat'
@@ -124,7 +124,7 @@ function Set-MinimalDeviceManagerStatus {
             continue
         }
 
-        $info = Get-MinimalDeviceManagerCodeInfo -Code $code
+        $info = Get-WcdDeviceManagerCodeInfo -Code $code
         $deviceName = $device.Name
         if ([string]::IsNullOrWhiteSpace($deviceName)) {
             $deviceName = $device.PNPDeviceID
@@ -133,8 +133,8 @@ function Set-MinimalDeviceManagerStatus {
             $deviceName = 'Peripherique sans nom'
         }
 
-        if (Test-MinimalIgnoredDeviceManagerIssue -DeviceName $deviceName -Code $code) {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Device Manager: peripherique ignore selon exception connue: {0} (code {1}).' -f $deviceName, $code)
+        if (Test-WcdIgnoredDeviceManagerIssue -DeviceName $deviceName -Code $code) {
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Device Manager: peripherique ignore selon exception connue: {0} (code {1}).' -f $deviceName, $code)
             continue
         }
 
@@ -150,15 +150,15 @@ function Set-MinimalDeviceManagerStatus {
     $errorDevices = @($problemDevices | Where-Object { $_.Severity -eq 'ERROR' })
 
     if ($errorDevices.Count -gt 0) {
-        $errorSummary = Format-MinimalDeviceManagerSummary -Devices $errorDevices
+        $errorSummary = Format-WcdDeviceManagerSummary -Devices $errorDevices
         $warningSummary = ''
         if ($warningDevices.Count -gt 0) {
-            $warningSummary = ' | Warnings: {0}' -f (Format-MinimalDeviceManagerSummary -Devices $warningDevices)
+            $warningSummary = ' | Warnings: {0}' -f (Format-WcdDeviceManagerSummary -Devices $warningDevices)
         }
 
         $message = 'Erreurs Device Manager detectees ({0}): {1}{2}' -f $errorDevices.Count, $errorSummary, $warningSummary
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'error'
 
         return [pscustomobject]@{
             Step     = 'DeviceManagerEtat'
@@ -169,9 +169,9 @@ function Set-MinimalDeviceManagerStatus {
     }
 
     if ($warningDevices.Count -gt 0) {
-        $message = 'Warnings Device Manager detectes ({0}): {1}' -f $warningDevices.Count, (Format-MinimalDeviceManagerSummary -Devices $warningDevices)
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message $message
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'warning'
+        $message = 'Warnings Device Manager detectes ({0}): {1}' -f $warningDevices.Count, (Format-WcdDeviceManagerSummary -Devices $warningDevices)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'warning'
 
         return [pscustomobject]@{
             Step     = 'DeviceManagerEtat'
@@ -181,8 +181,8 @@ function Set-MinimalDeviceManagerStatus {
         }
     }
 
-    Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Device Manager: aucun warning ni aucune erreur detecte.'
-    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'success'
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Device Manager: aucun warning ni aucune erreur detecte.'
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DeviceManagerEtat' -Event 'Finish' -Kind 'success'
     return [pscustomobject]@{
         Step     = 'DeviceManagerEtat'
         Success  = $true

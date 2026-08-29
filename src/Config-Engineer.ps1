@@ -8,7 +8,7 @@
     seule execution. Si le type est 'Non', l'etape est ignoree sans erreur.
     Tente d'ouvrir les URLs dans Chrome; bascule sur le navigateur par defaut
     si Chrome est introuvable.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER EngineerTypes
     Tableau de types d'ingenieur. Valeurs acceptees: 'Nvidia', 'GPS', 'Non'.
@@ -16,10 +16,10 @@
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .PARAMETER Config
-    Hashtable de configuration importee depuis Config-Paths.psd1.
+    Hashtable de configuration importee depuis WinContextDeploy.psd1.
     Permet de surcharger les URLs et chemins par defaut.
 
 .PARAMETER ProgressCallback
@@ -29,7 +29,7 @@
     [pscustomobject[]] — tableau de resultats avec Step, Success, Error.
 #>
 
-function Open-MinimalUrlInChrome {
+function Open-WcdUrlInChrome {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -46,7 +46,7 @@ function Open-MinimalUrlInChrome {
     }
 }
 
-function Open-MinimalShortcut {
+function Open-WcdShortcut {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -56,7 +56,7 @@ function Open-MinimalShortcut {
     Start-Process $Path -ErrorAction Stop
 }
 
-function Set-MinimalEngineerConfiguration {
+function Set-WcdEngineerConfiguration {
     [CmdletBinding()]
     param(
         [string[]]$EngineerTypes = @('Non'),
@@ -65,13 +65,13 @@ function Set-MinimalEngineerConfiguration {
         [scriptblock]$ProgressCallback
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $moduleName = 'Config-Engineer'
 
     if ($EngineerTypes.Count -eq 1 -and $EngineerTypes[0] -eq 'Non') {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Ingenieur: aucune configuration requise.'
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Start'
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Finish' -Kind 'success'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Ingenieur: aucune configuration requise.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerSkip' -Event 'Finish' -Kind 'success'
         return @([pscustomobject]@{ Step = 'EngineerSkip'; Success = $true; Error = '' })
     }
 
@@ -93,14 +93,14 @@ function Set-MinimalEngineerConfiguration {
                     $url = $engConfig.NvidiaUrl
                 }
                 try {
-                    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Start'
-                    Open-MinimalUrlInChrome -Url $url -ChromePath $chromePath
-                    Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ("Ingenieur: Nvidia ouvert ({0})." -f $url)
-                    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Finish' -Kind 'success'
+                    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Start'
+                    Open-WcdUrlInChrome -Url $url -ChromePath $chromePath
+                    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Ingenieur: Nvidia ouvert ({0})." -f $url)
+                    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Finish' -Kind 'success'
                     $results += [pscustomobject]@{ Step = 'EngineerNvidia'; Success = $true; Error = '' }
                 } catch {
-                    Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Ingenieur Nvidia: {0}" -f $_.Exception.Message)
-                    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Finish' -Kind 'error'
+                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Ingenieur Nvidia: {0}" -f $_.Exception.Message)
+                    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerNvidia' -Event 'Finish' -Kind 'error'
                     $results += [pscustomobject]@{ Step = 'EngineerNvidia'; Success = $false; Error = $_.Exception.Message }
                 }
             }
@@ -110,14 +110,14 @@ function Set-MinimalEngineerConfiguration {
                     $url = $engConfig.GPSUrl
                 }
                 try {
-                    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Start'
-                    Open-MinimalUrlInChrome -Url $url -ChromePath $chromePath
-                    Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ("Ingenieur: GPS ouvert ({0})." -f $url)
-                    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Finish' -Kind 'success'
+                    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Start'
+                    Open-WcdUrlInChrome -Url $url -ChromePath $chromePath
+                    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Ingenieur: GPS ouvert ({0})." -f $url)
+                    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Finish' -Kind 'success'
                     $results += [pscustomobject]@{ Step = 'EngineerGPS'; Success = $true; Error = '' }
                 } catch {
-                    Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Ingenieur GPS: {0}" -f $_.Exception.Message)
-                    Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Finish' -Kind 'error'
+                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Ingenieur GPS: {0}" -f $_.Exception.Message)
+                    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'EngineerGPS' -Event 'Finish' -Kind 'error'
                     $results += [pscustomobject]@{ Step = 'EngineerGPS'; Success = $false; Error = $_.Exception.Message }
                 }
             }

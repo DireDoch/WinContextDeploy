@@ -1,13 +1,13 @@
-# Run-AllConfigurations.ps1
+# Invoke-WcdConfiguration.ps1
 # Script central qui charge les helpers, execute chaque module de configuration
 # et affiche un diagnostic complet avec debug.
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1
-#   powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1 -DeviceType Portable
-#   powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1 -Language en-US -DeviceType Bureau -Usage Secondaire -NonInteractive
-#   powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1 -DeviceType Bureau -LogPath C:\temp\log.txt
-#   powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1 -HistoryLogPath D:\log.txt -LocalProjectRoot C:\Temp\ScriptTest
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -DeviceType Portable
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -Language en-US -DeviceType Bureau -Usage Secondaire -NonInteractive
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -DeviceType Bureau -LogPath C:\temp\log.txt
+#   powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 -HistoryLogPath D:\log.txt -LocalProjectRoot C:\Temp\WinContextDeploy
 
 [CmdletBinding()]
 param(
@@ -99,7 +99,7 @@ $T = if ($ScriptUI -eq 'EN') {
         AutoExportLog           = 'Automatic log export to: {0}'
         HistoryExported         = 'History added to: {0}'
         HistoryExportFailed     = '[WARNING] History export failed. Local copy preserved. Detail: {0}'
-        FatalHelpersMissing     = '[FATAL ERROR] MinimalHelpers.ps1 not found in: {0}'
+        FatalHelpersMissing     = '[FATAL ERROR] WcdHelpers.ps1 not found in: {0}'
         FatalConfig             = '[FATAL ERROR] {0}'
         FatalLogConflict        = '[FATAL ERROR] -LogPath and -HistoryLogPath must be different.'
         AS400Warning            = 'Warning: your primary device does not have AS400.'
@@ -176,7 +176,7 @@ $T = if ($ScriptUI -eq 'EN') {
         AutoExportLog           = 'Export automatique des logs vers: {0}'
         HistoryExported         = 'Historique ajoute dans: {0}'
         HistoryExportFailed     = '[AVERTISSEMENT] Export historique impossible. La copie locale est conservee. Detail: {0}'
-        FatalHelpersMissing     = '[ERREUR FATALE] MinimalHelpers.ps1 introuvable dans: {0}'
+        FatalHelpersMissing     = '[ERREUR FATALE] WcdHelpers.ps1 introuvable dans: {0}'
         FatalConfig             = '[ERREUR FATALE] {0}'
         FatalLogConflict        = '[ERREUR FATALE] -LogPath et -HistoryLogPath doivent etre differents.'
         AS400Warning            = "Warning: votre poste principal n a pas AS400."
@@ -207,7 +207,7 @@ if ([string]::IsNullOrWhiteSpace($scriptDir)) {
 }
 
 # --- Chargement des helpers partages ---
-$helpersPath = Join-Path $scriptDir 'MinimalHelpers.ps1'
+$helpersPath = Join-Path $scriptDir 'WcdHelpers.ps1'
 if (-not (Test-Path -LiteralPath $helpersPath)) {
     Write-Host ($T.FatalHelpersMissing -f $scriptDir) -ForegroundColor Red
     exit 1
@@ -216,13 +216,13 @@ if (-not (Test-Path -LiteralPath $helpersPath)) {
 
 # --- Chargement de la configuration statique ---
 try {
-    $script:MinimalConfig = Import-MinimalConfig -ConfigPath $ConfigPath
+    $script:WcdConfig = Import-WcdConfig -ConfigPath $ConfigPath
 } catch {
     Write-Host ($T.FatalConfig -f $_.Exception.Message) -ForegroundColor Red
     exit 1
 }
 
-function Show-MinimalBanner {
+function Show-WcdBanner {
     [CmdletBinding()]
     param()
 
@@ -258,7 +258,7 @@ function Show-MinimalBanner {
     Write-Host ''
 }
 
-function Read-MinimalChoice {
+function Read-WcdChoice {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -288,7 +288,7 @@ function Read-MinimalChoice {
 
     # Mode texte de secours: utilise UNIQUEMENT lorsque la lecture clavier
     # interactive n'est pas disponible (entree redirigee, hote sans RawUI).
-    function Invoke-MinimalChoiceFallback {
+    function Invoke-WcdChoiceFallback {
         foreach ($desc in $Description) { Write-Host $desc -ForegroundColor DarkGray }
         while ($true) {
             $suffix = ($entries | ForEach-Object {
@@ -326,7 +326,7 @@ function Read-MinimalChoice {
     }
 
     if (-not $canUseArrowKeys) {
-        return Invoke-MinimalChoiceFallback
+        return Invoke-WcdChoiceFallback
     }
 
     # Partie statique (ecrite une seule fois): question, description, aide.
@@ -354,7 +354,7 @@ function Read-MinimalChoice {
             $keyInfo = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         } catch {
             Write-Host ''
-            return Invoke-MinimalChoiceFallback
+            return Invoke-WcdChoiceFallback
         }
 
         switch ($keyInfo.VirtualKeyCode) {
@@ -381,7 +381,7 @@ function Read-MinimalChoice {
     }
 }
 
-function ConvertTo-MinimalEngineerSelections {
+function ConvertTo-WcdEngineerSelections {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -404,7 +404,7 @@ function ConvertTo-MinimalEngineerSelections {
     return $chars
 }
 
-function Read-MinimalEngineerChoice {
+function Read-WcdEngineerChoice {
     [CmdletBinding()]
     param()
 
@@ -432,7 +432,7 @@ function Read-MinimalEngineerChoice {
             continue
         }
 
-        $parsed = ConvertTo-MinimalEngineerSelections -RawInput $answer -ValidKeys @($options.Keys)
+        $parsed = ConvertTo-WcdEngineerSelections -RawInput $answer -ValidKeys @($options.Keys)
         if ($parsed.Count -eq 0) {
             Write-Host ($T.EngineerInvalidChoice -f ($options.Keys -join ', ')) -ForegroundColor Yellow
             continue
@@ -444,7 +444,7 @@ function Read-MinimalEngineerChoice {
     }
 }
 
-function Wait-MinimalForEnter {
+function Wait-WcdForEnter {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -475,7 +475,7 @@ function Wait-MinimalForEnter {
     }
 }
 
-function Resolve-MinimalExecutionOptions {
+function Resolve-WcdExecutionOptions {
     [CmdletBinding()]
     param(
         [string]$SelectedLanguage,
@@ -497,19 +497,19 @@ function Resolve-MinimalExecutionOptions {
     if (-not $DisablePrompt) {
         if (-not $languageResult) {
             Write-Host ''
-            $languageResult = Read-MinimalChoice -Prompt $T.PromptLanguage -Choices ([ordered]@{ FR = 'fr-CA'; EN = 'en-US' }) -DefaultKey 'FR' `
+            $languageResult = Read-WcdChoice -Prompt $T.PromptLanguage -Choices ([ordered]@{ FR = 'fr-CA'; EN = 'en-US' }) -DefaultKey 'FR' `
                 -Description @($T.PromptLanguageDesc)
         }
 
         if (-not $deviceResult) {
             Write-Host ''
-            $deviceResult = Read-MinimalChoice -Prompt $T.PromptDeviceType -Choices ([ordered]@{ P = 'Portable'; B = 'Bureau' }) -DefaultKey 'P' `
+            $deviceResult = Read-WcdChoice -Prompt $T.PromptDeviceType -Choices ([ordered]@{ P = 'Portable'; B = 'Bureau' }) -DefaultKey 'P' `
                 -Description @($T.PromptDeviceDesc1, $T.PromptDeviceDesc2)
         }
 
         if (-not $usageResult) {
             Write-Host ''
-            $usageResult = Read-MinimalChoice -Prompt $T.PromptUsage -Choices ([ordered]@{ P = 'Principal'; S = 'Secondaire' }) -DefaultKey 'P' `
+            $usageResult = Read-WcdChoice -Prompt $T.PromptUsage -Choices ([ordered]@{ P = 'Principal'; S = 'Secondaire' }) -DefaultKey 'P' `
                 -Description @($T.PromptUsageDesc1, $T.PromptUsageDesc2)
         }
 
@@ -517,16 +517,16 @@ function Resolve-MinimalExecutionOptions {
 
         if (-not $openAppsResult) {
             Write-Host ''
-            $openAppsResult = Read-MinimalChoice -Prompt ($T.PromptOpenApps -f $usageLabel) -Choices ([ordered]@{ O = 'Oui'; N = 'Non' }) -DefaultKey 'O' `
+            $openAppsResult = Read-WcdChoice -Prompt ($T.PromptOpenApps -f $usageLabel) -Choices ([ordered]@{ O = 'Oui'; N = 'Non' }) -DefaultKey 'O' `
                 -Description @($T.PromptOpenAppsDesc1, $T.PromptOpenAppsDesc2)
         }
 
         if (-not $engineerResult) {
             Write-Host ''
-            $engineerYesNo = Read-MinimalChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ O = 'Oui'; N = 'Non' }) -DefaultKey 'N' `
+            $engineerYesNo = Read-WcdChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ O = 'Oui'; N = 'Non' }) -DefaultKey 'N' `
                 -Description @($T.PromptEngineerDesc1, $T.PromptEngineerDesc2)
             if ($engineerYesNo -eq 'Oui') {
-                $engineerTypes = Read-MinimalEngineerChoice
+                $engineerTypes = Read-WcdEngineerChoice
             } else {
                 $engineerTypes = @('Non')
             }
@@ -558,7 +558,7 @@ function Resolve-MinimalExecutionOptions {
 }
 
 # --- Resolution des options et du log ---
-Show-MinimalBanner
+Show-WcdBanner
 
 $resolvedLocalProjectRoot = $LocalProjectRoot
 if ([string]::IsNullOrWhiteSpace($resolvedLocalProjectRoot)) {
@@ -575,7 +575,7 @@ if (-not [string]::IsNullOrWhiteSpace($resolvedUsbSourceRoot) -and (Test-Path -L
 
 $openAppsValue = if ($OpenApps) { 'Oui' } else { '' }
 
-$executionOptions = Resolve-MinimalExecutionOptions `
+$executionOptions = Resolve-WcdExecutionOptions `
     -SelectedLanguage $Language `
     -SelectedDeviceType $DeviceType `
     -SelectedUsage $Usage `
@@ -583,7 +583,7 @@ $executionOptions = Resolve-MinimalExecutionOptions `
     -SelectedEngineerType $EngineerType `
     -DisablePrompt:$NonInteractive
 
-$resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+$resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
 if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
     try {
         $sameLogTarget = [string]::Equals(
@@ -599,20 +599,20 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
     }
 }
 
-Initialize-MinimalLog -Path $resolvedLogPath
-Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message '=== Debut execution Run-AllConfigurations ==='
-Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | DeviceType: {1} | Usage: {2} | OpenApps: {3} | Engineer: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.DeviceType, $executionOptions.Usage, $executionOptions.OpenApps, ($executionOptions.EngineerTypes -join ','), $resolvedLogPath)
+Initialize-WcdLog -Path $resolvedLogPath
+Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message '=== Debut execution WinContextDeploy ==='
+Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("Language: {0} | DeviceType: {1} | Usage: {2} | OpenApps: {3} | Engineer: {4} | LogPath: {5}" -f $executionOptions.Language, $executionOptions.DeviceType, $executionOptions.Usage, $executionOptions.OpenApps, ($executionOptions.EngineerTypes -join ','), $resolvedLogPath)
 if (-not [string]::IsNullOrWhiteSpace($resolvedLocalProjectRoot)) {
-    Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ("LocalProjectRoot: {0}" -f $resolvedLocalProjectRoot)
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("LocalProjectRoot: {0}" -f $resolvedLocalProjectRoot)
 }
 if (-not [string]::IsNullOrWhiteSpace($resolvedUsbSourceRoot)) {
-    Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ("UsbSourceRoot: {0}" -f $resolvedUsbSourceRoot)
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("UsbSourceRoot: {0}" -f $resolvedUsbSourceRoot)
 }
 if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
-    Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ("HistoryLogPath: {0}" -f $HistoryLogPath)
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("HistoryLogPath: {0}" -f $HistoryLogPath)
 }
 
-function Get-MinimalSeverityRank {
+function Get-WcdSeverityRank {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -626,7 +626,7 @@ function Get-MinimalSeverityRank {
     }
 }
 
-function Get-MinimalResultsForSteps {
+function Get-WcdResultsForSteps {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -645,7 +645,7 @@ function Get-MinimalResultsForSteps {
     return $results
 }
 
-function Get-MinimalStrongestResult {
+function Get-WcdStrongestResult {
     [CmdletBinding()]
     param(
         [object[]]$Results = @()
@@ -654,7 +654,7 @@ function Get-MinimalStrongestResult {
     $strongest = $null
     $strongestRank = 0
     foreach ($result in @($Results)) {
-        $currentRank = Get-MinimalSeverityRank -Severity (Get-MinimalResultSeverity -Result $result)
+        $currentRank = Get-WcdSeverityRank -Severity (Get-WcdResultSeverity -Result $result)
         if ($currentRank -gt $strongestRank) {
             $strongest = $result
             $strongestRank = $currentRank
@@ -664,7 +664,7 @@ function Get-MinimalStrongestResult {
     return $strongest
 }
 
-function Get-MinimalAggregateDetail {
+function Get-WcdAggregateDetail {
     [CmdletBinding()]
     param(
         [object[]]$Results = @(),
@@ -675,7 +675,7 @@ function Get-MinimalAggregateDetail {
 
     $details = @()
     foreach ($result in @($Results)) {
-        $severity = Get-MinimalResultSeverity -Result $result
+        $severity = Get-WcdResultSeverity -Result $result
         if ($severity -eq 'INFO' -and [string]::IsNullOrWhiteSpace($result.Error)) {
             continue
         }
@@ -691,7 +691,7 @@ function Get-MinimalAggregateDetail {
     return ($details -join ' | ')
 }
 
-function New-MinimalDiagnosticEntry {
+function New-WcdDiagnosticEntry {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -711,7 +711,7 @@ function New-MinimalDiagnosticEntry {
     }
 }
 
-function Resolve-MinimalAutomaticEntry {
+function Resolve-WcdAutomaticEntry {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -733,34 +733,34 @@ function Resolve-MinimalAutomaticEntry {
 
     if ([string]::IsNullOrWhiteSpace($MissingDetail)) { $MissingDetail = $T.MissingModuleData }
 
-    $results = @(Get-MinimalResultsForSteps -ResultLookup $ResultLookup -StepKeys $StepKeys)
+    $results = @(Get-WcdResultsForSteps -ResultLookup $ResultLookup -StepKeys $StepKeys)
     if ($results.Count -eq 0) {
-        return New-MinimalDiagnosticEntry -Label $Label -Kind $MissingKind -Detail $MissingDetail
+        return New-WcdDiagnosticEntry -Label $Label -Kind $MissingKind -Detail $MissingDetail
     }
 
     $missingStepKeys = @($StepKeys | Where-Object { -not $ResultLookup.ContainsKey($_) })
-    $strongest = Get-MinimalStrongestResult -Results $results
-    $severity = Get-MinimalResultSeverity -Result $strongest
+    $strongest = Get-WcdStrongestResult -Results $results
+    $severity = Get-WcdResultSeverity -Result $strongest
 
     if ($severity -eq 'ERROR') {
-        return New-MinimalDiagnosticEntry -Label $Label -Kind 'error' -Detail (Get-MinimalAggregateDetail -Results $results -StepLabels $StepLabels)
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'error' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels)
     }
 
     if ($severity -eq 'WARNING') {
-        return New-MinimalDiagnosticEntry -Label $Label -Kind 'warning' -Detail (Get-MinimalAggregateDetail -Results $results -StepLabels $StepLabels)
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels)
     }
 
     if ($missingStepKeys.Count -gt 0) {
         $missingLabels = @($missingStepKeys | ForEach-Object {
             if ($StepLabels.ContainsKey($_)) { $StepLabels[$_] } else { $_ }
         })
-        return New-MinimalDiagnosticEntry -Label $Label -Kind 'warning' -Detail ($T.MissingStepTech -f ($missingLabels -join ', '))
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail ($T.MissingStepTech -f ($missingLabels -join ', '))
     }
 
-    return New-MinimalDiagnosticEntry -Label $Label -Kind 'success'
+    return New-WcdDiagnosticEntry -Label $Label -Kind 'success'
 }
 
-function Get-MinimalModuleStatusKind {
+function Get-WcdModuleStatusKind {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -774,15 +774,15 @@ function Get-MinimalModuleStatusKind {
     }
 }
 
-function Format-MinimalModuleLine {
+function Format-WcdModuleLine {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         $ModuleStatus
     )
 
-    $kind = Get-MinimalModuleStatusKind -Status $ModuleStatus.Status
-    $style = Get-MinimalDiagnosticStyle -Kind $kind
+    $kind = Get-WcdModuleStatusKind -Status $ModuleStatus.Status
+    $style = Get-WcdDiagnosticStyle -Kind $kind
     $line = ('  {0}  {1,-25} {2,-9} {3} {4}' -f $style.Icon, $ModuleStatus.Module, $ModuleStatus.Status, $ModuleStatus.Etapes, $T.StepCount)
     if (-not [string]::IsNullOrWhiteSpace($ModuleStatus.Detail)) {
         $line += '  ' + $ModuleStatus.Detail
@@ -791,14 +791,14 @@ function Format-MinimalModuleLine {
     return $line
 }
 
-function Format-MinimalChecklistLine {
+function Format-WcdChecklistLine {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         $Entry
     )
 
-    $style = Get-MinimalDiagnosticStyle -Kind $Entry.Kind
+    $style = Get-WcdDiagnosticStyle -Kind $Entry.Kind
     $line = '  {0}  {1,-24} {2,-9}' -f $style.Icon, $Entry.Label, $style.Status
     if (-not [string]::IsNullOrWhiteSpace($Entry.Detail)) {
         $line += '  ' + $Entry.Detail
@@ -807,7 +807,7 @@ function Format-MinimalChecklistLine {
     return $line
 }
 
-function Write-MinimalSectionHeader {
+function Write-WcdSectionHeader {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -820,7 +820,7 @@ function Write-MinimalSectionHeader {
     Write-Host '===============================================' -ForegroundColor Cyan
 }
 
-function Test-MinimalEngineerTypeSelected {
+function Test-WcdEngineerTypeSelected {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -833,7 +833,7 @@ function Test-MinimalEngineerTypeSelected {
     return (@($ExecutionOptions.EngineerTypes) -contains $EngineerType)
 }
 
-function Get-MinimalAS400DiagnosticResult {
+function Get-WcdAS400DiagnosticResult {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -900,7 +900,7 @@ function Get-MinimalAS400DiagnosticResult {
     }
 }
 
-function Get-MinimalAutovueDiagnosticResult {
+function Get-WcdAutovueDiagnosticResult {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -951,7 +951,7 @@ function Get-MinimalAutovueDiagnosticResult {
     }
 }
 
-function Get-MinimalFinalChecklistEntries {
+function Get-WcdFinalChecklistEntries {
     [CmdletBinding()]
     param(
         [object[]]$AllResults = @(),
@@ -994,90 +994,90 @@ function Get-MinimalFinalChecklistEntries {
         )
     }
 
-    $entries += Resolve-MinimalAutomaticEntry -Label 'Taskbar a gauche' -ResultLookup $lookup -StepKeys @('TaskbarAlignementGauche', 'DesactiverVueTaches') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label 'Taskbar a gauche' -ResultLookup $lookup -StepKeys @('TaskbarAlignementGauche', 'DesactiverVueTaches') -StepLabels $StepLabels
 
     if ($applicationsSkipped) {
-        $entries += New-MinimalDiagnosticEntry -Label 'Software center ok' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label 'Software center ok' -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Software center ok' -ResultLookup $lookup -StepKeys @('AppSoftwareCenter') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Software center ok' -ResultLookup $lookup -StepKeys @('AppSoftwareCenter') -StepLabels $StepLabels
     }
 
-    $entries += Resolve-MinimalAutomaticEntry -Label 'Device manager' -ResultLookup $lookup -StepKeys @('DeviceManagerEtat') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label 'Device manager' -ResultLookup $lookup -StepKeys @('DeviceManagerEtat') -StepLabels $StepLabels
 
     if ($applicationsSkipped) {
-        $entries += New-MinimalDiagnosticEntry -Label 'Outlook' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label 'Outlook' -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Outlook' -ResultLookup $lookup -StepKeys @('AppOutlook') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Outlook' -ResultLookup $lookup -StepKeys @('AppOutlook') -StepLabels $StepLabels
     }
 
-    $entries += New-MinimalDiagnosticEntry -Label 'Signature' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Signature' -Kind 'manual' -Detail $standardManualDetail
 
     if ($applicationsSkipped) {
-        $entries += New-MinimalDiagnosticEntry -Label 'Global protect' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label 'Global protect' -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Global protect' -ResultLookup $lookup -StepKeys @('AppGlobalProtect') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Global protect' -ResultLookup $lookup -StepKeys @('AppGlobalProtect') -StepLabels $StepLabels
     }
 
-    $entries += New-MinimalDiagnosticEntry -Label 'Wifi' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Wifi' -Kind 'manual' -Detail $standardManualDetail
 
     if ($applicationsSkipped) {
-        $entries += New-MinimalDiagnosticEntry -Label 'Snag it/Snipping Tool' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label 'Snag it/Snipping Tool' -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Snag it/Snipping Tool' -ResultLookup $lookup -StepKeys @('AppSnipIt') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Snag it/Snipping Tool' -ResultLookup $lookup -StepKeys @('AppSnipIt') -StepLabels $StepLabels
     }
 
     if ($ExecutionOptions.Usage -eq 'Principal') {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'SAP PP1' -ResultLookup $lookup -StepKeys @('SAPFrontEnd') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'SAP PP1' -ResultLookup $lookup -StepKeys @('SAPFrontEnd') -StepLabels $StepLabels
     } else {
-        $entries += New-MinimalDiagnosticEntry -Label 'SAP PP1' -Kind 'na' -Detail $T.SecondaryNA
+        $entries += New-WcdDiagnosticEntry -Label 'SAP PP1' -Kind 'na' -Detail $T.SecondaryNA
     }
 
-    $entries += Resolve-MinimalAutomaticEntry -Label 'Language ok' -ResultLookup $lookup -StepKeys @('LangueWindows') -StepLabels $StepLabels
-    $entries += Resolve-MinimalAutomaticEntry -Label 'Clavier ok' -ResultLookup $lookup -StepKeys @('ClavierWindows') -StepLabels $StepLabels
-    $entries += Resolve-MinimalAutomaticEntry -Label 'Decimal (reg-set)' -ResultLookup $lookup -StepKeys @('DecimalEtMonetaire') -StepLabels $StepLabels
-    $entries += Resolve-MinimalAutomaticEntry -Label 'Power options' -ResultLookup $lookup -StepKeys $powerStepKeys -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label 'Language ok' -ResultLookup $lookup -StepKeys @('LangueWindows') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label 'Clavier ok' -ResultLookup $lookup -StepKeys @('ClavierWindows') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label 'Decimal (reg-set)' -ResultLookup $lookup -StepKeys @('DecimalEtMonetaire') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label 'Power options' -ResultLookup $lookup -StepKeys $powerStepKeys -StepLabels $StepLabels
 
     if ($ExecutionOptions.Usage -eq 'Principal') {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'AS400' -ResultLookup $lookup -StepKeys @('AS400Presence') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'AS400' -ResultLookup $lookup -StepKeys @('AS400Presence') -StepLabels $StepLabels
     } else {
-        $entries += New-MinimalDiagnosticEntry -Label 'AS400' -Kind 'na' -Detail $T.SecondaryNA
+        $entries += New-WcdDiagnosticEntry -Label 'AS400' -Kind 'na' -Detail $T.SecondaryNA
     }
 
     if ($applicationsSkipped) {
-        $entries += New-MinimalDiagnosticEntry -Label 'Teams' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label 'Teams' -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Teams' -ResultLookup $lookup -StepKeys @('AppTeams') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Teams' -ResultLookup $lookup -StepKeys @('AppTeams') -StepLabels $StepLabels
     }
 
-    $entries += New-MinimalDiagnosticEntry -Label 'Lecteurs reseau' -Kind 'manual' -Detail $standardManualDetail
-    $entries += New-MinimalDiagnosticEntry -Label 'Synchronisation' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Lecteurs reseau' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Synchronisation' -Kind 'manual' -Detail $standardManualDetail
 
     if ($ExecutionOptions.Usage -eq 'Secondaire') {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Citrix' -ResultLookup $lookup -StepKeys @('UsageCitrix') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Citrix' -ResultLookup $lookup -StepKeys @('UsageCitrix') -StepLabels $StepLabels
     } else {
-        $entries += New-MinimalDiagnosticEntry -Label 'Citrix' -Kind 'na' -Detail $T.PrimaryNA
+        $entries += New-WcdDiagnosticEntry -Label 'Citrix' -Kind 'na' -Detail $T.PrimaryNA
     }
 
     if ($ExecutionOptions.Usage -eq 'Principal') {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'Autovue' -ResultLookup $lookup -StepKeys @('AutovuePresence') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'Autovue' -ResultLookup $lookup -StepKeys @('AutovuePresence') -StepLabels $StepLabels
     } else {
-        $entries += New-MinimalDiagnosticEntry -Label 'Autovue' -Kind 'na' -Detail $T.SecondaryNA
+        $entries += New-WcdDiagnosticEntry -Label 'Autovue' -Kind 'na' -Detail $T.SecondaryNA
     }
 
-    $entries += New-MinimalDiagnosticEntry -Label 'Imprimantes' -Kind 'manual' -Detail $standardManualDetail
-    $entries += New-MinimalDiagnosticEntry -Label 'Bureau' -Kind 'manual' -Detail $T.DeskWindowsDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Imprimantes' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Bureau' -Kind 'manual' -Detail $T.DeskWindowsDetail
 
     if ($applicationsSkipped) {
-        $entries += New-MinimalDiagnosticEntry -Label 'My Support' -Kind 'manual' -Detail $applicationManualDetail
+        $entries += New-WcdDiagnosticEntry -Label 'My Support' -Kind 'manual' -Detail $applicationManualDetail
     } else {
-        $entries += Resolve-MinimalAutomaticEntry -Label 'My Support' -ResultLookup $lookup -StepKeys @('AppServiceNow') -StepLabels $StepLabels
+        $entries += Resolve-WcdAutomaticEntry -Label 'My Support' -ResultLookup $lookup -StepKeys @('AppServiceNow') -StepLabels $StepLabels
     }
 
-    $entries += New-MinimalDiagnosticEntry -Label 'Favoris' -Kind 'manual' -Detail $standardManualDetail
+    $entries += New-WcdDiagnosticEntry -Label 'Favoris' -Kind 'manual' -Detail $standardManualDetail
     return $entries
 }
 
-function Get-MinimalFinalDiagnosticLines {
+function Get-WcdFinalDiagnosticLines {
     [CmdletBinding()]
     param(
         [object[]]$ModuleStatus = @(),
@@ -1092,7 +1092,7 @@ function Get-MinimalFinalDiagnosticLines {
     )
 
     foreach ($module in @($ModuleStatus)) {
-        $lines += Format-MinimalModuleLine -ModuleStatus $module
+        $lines += Format-WcdModuleLine -ModuleStatus $module
     }
 
     $lines += ''
@@ -1101,7 +1101,7 @@ function Get-MinimalFinalDiagnosticLines {
     $lines += '==============================================='
 
     foreach ($entry in @($ChecklistEntries)) {
-        $lines += Format-MinimalChecklistLine -Entry $entry
+        $lines += Format-WcdChecklistLine -Entry $entry
     }
 
     if (-not [string]::IsNullOrWhiteSpace($SummaryLine)) {
@@ -1123,8 +1123,8 @@ $modules = @(
     @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' }
 )
 
-$stepLabels = Get-MinimalTechnicalStepLabels
-$moduleStepPlan = Get-MinimalModuleProgressPlan -ExecutionOptions $executionOptions
+$stepLabels = Get-WcdTechnicalStepLabels
+$moduleStepPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions
 $allResults = @()
 $moduleStatus = @()
 
@@ -1136,7 +1136,7 @@ foreach ($mod in $modules) {
     if (-not (Test-Path -LiteralPath $modPath)) {
         $msg = ($T.ModuleNotFound -f $modPath)
         Write-Host "  [ERREUR] $msg" -ForegroundColor Red
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $msg
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $msg
         $moduleStatus += [pscustomobject]@{
             Module         = $modName
             Status         = $T.StatusError
@@ -1154,7 +1154,7 @@ foreach ($mod in $modules) {
     } catch {
         $msg = ($T.ModuleLoadFail -f $modName, $_.Exception.Message)
         Write-Host "  [ERREUR] $msg" -ForegroundColor Red
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $msg
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $msg
         $moduleStatus += [pscustomobject]@{
             Module         = $modName
             Status         = $T.StatusError
@@ -1170,62 +1170,62 @@ foreach ($mod in $modules) {
     $modResults = @()
     $modError = $null
     $startTime = Get-Date
-    $progressState = New-MinimalProgressState -ModuleName $modName -StepKeys $moduleStepPlan[$modName] -StepLabels $stepLabels
+    $progressState = New-WcdProgressState -ModuleName $modName -StepKeys $moduleStepPlan[$modName] -StepLabels $stepLabels
     $progressCallback = {
         param($eventData)
 
-        Update-MinimalProgressState -State $progressState -StepKey $eventData.Step -Event $eventData.Event -Kind $eventData.Kind
+        Update-WcdProgressState -State $progressState -StepKey $eventData.Step -Event $eventData.Event -Kind $eventData.Kind
     }
 
     try {
         switch ($modName) {
             'Config-Power' {
-                $modResults = @(Set-MinimalPowerConfiguration -DeviceType $executionOptions.DeviceType -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdPowerConfiguration -DeviceType $executionOptions.DeviceType -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Decimal' {
-                $modResults = @(Set-MinimalDecimalConfiguration -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdDecimalConfiguration -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-TaskbarLeft' {
-                $modResults = @(Set-MinimalTaskbarLeft -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdTaskbarLeft -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Language' {
-                $modResults = @(Set-MinimalLanguageConfiguration -Culture $executionOptions.Language -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdLanguageConfiguration -Culture $executionOptions.Language -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Usage' {
-                $modResults = @(Set-MinimalUsageConfiguration -Usage $executionOptions.Usage -LogPath $resolvedLogPath -Config $script:MinimalConfig -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdUsageConfiguration -Usage $executionOptions.Usage -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
             }
             'Config-Applications' {
-                $modResults = @(Set-MinimalApplicationsConfiguration -Usage $executionOptions.Usage -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -Config $script:MinimalConfig -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdApplicationsConfiguration -Usage $executionOptions.Usage -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
             }
             'Config-Engineer' {
-                $modResults = @(Set-MinimalEngineerConfiguration -EngineerTypes $executionOptions.EngineerTypes -LogPath $resolvedLogPath -Config $script:MinimalConfig -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdEngineerConfiguration -EngineerTypes $executionOptions.EngineerTypes -LogPath $resolvedLogPath -Config $script:WcdConfig -ProgressCallback $progressCallback)
             }
             'Config-DeviceManager' {
-                $modResults = @(Set-MinimalDeviceManagerStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+                $modResults = @(Set-WcdDeviceManagerStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
         }
     } catch {
         $modError = $_.Exception.Message
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Module ${modName} crash: {0}" -f $modError)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Module ${modName} crash: {0}" -f $modError)
     }
 
     $duration = (Get-Date) - $startTime
 
     # Comptage des resultats
     $totalSteps = $modResults.Count
-    $failedSteps = @($modResults | Where-Object { (Get-MinimalResultSeverity -Result $_) -eq 'ERROR' }).Count
-    $warningSteps = @($modResults | Where-Object { (Get-MinimalResultSeverity -Result $_) -eq 'WARNING' }).Count
+    $failedSteps = @($modResults | Where-Object { (Get-WcdResultSeverity -Result $_) -eq 'ERROR' }).Count
+    $warningSteps = @($modResults | Where-Object { (Get-WcdResultSeverity -Result $_) -eq 'WARNING' }).Count
 
     if ($modError) {
         $statusLabel = $T.StatusCrash
         $detail = $modError
     } elseif ($failedSteps -gt 0) {
         $statusLabel = $T.StatusPartial
-        $failedNames = ($modResults | Where-Object { (Get-MinimalResultSeverity -Result $_) -eq 'ERROR' } | ForEach-Object { $_.Step }) -join ', '
+        $failedNames = ($modResults | Where-Object { (Get-WcdResultSeverity -Result $_) -eq 'ERROR' } | ForEach-Object { $_.Step }) -join ', '
         $detail = ($T.FailDetails -f $failedNames)
     } elseif ($warningSteps -gt 0) {
         $statusLabel = $T.StatusWarning
-        $warningNames = ($modResults | Where-Object { (Get-MinimalResultSeverity -Result $_) -eq 'WARNING' } | ForEach-Object { $_.Step }) -join ', '
+        $warningNames = ($modResults | Where-Object { (Get-WcdResultSeverity -Result $_) -eq 'WARNING' } | ForEach-Object { $_.Step }) -join ', '
         $detail = ($T.WarningDetails -f $warningNames)
     } else {
         $statusLabel = $T.StatusOk
@@ -1253,13 +1253,13 @@ foreach ($mod in $modules) {
 }
 
 $diagnosticResults = @($allResults)
-$as400Diagnostic = Get-MinimalAS400DiagnosticResult -ExecutionOptions $executionOptions -Config $script:MinimalConfig
+$as400Diagnostic = Get-WcdAS400DiagnosticResult -ExecutionOptions $executionOptions -Config $script:WcdConfig
 if ($null -ne $as400Diagnostic) {
     $diagnosticResults += $as400Diagnostic
 
-    $as400Severity = Get-MinimalResultSeverity -Result $as400Diagnostic
+    $as400Severity = Get-WcdResultSeverity -Result $as400Diagnostic
     if ($as400Severity -eq 'WARNING') {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('AS400: {0}' -f $as400Diagnostic.Error)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AS400: {0}' -f $as400Diagnostic.Error)
     } else {
         $detectedAs400Path = ''
         if ($null -ne $as400Diagnostic.PSObject.Properties['Path'] -and -not [string]::IsNullOrWhiteSpace([string]$as400Diagnostic.Path)) {
@@ -1267,20 +1267,20 @@ if ($null -ne $as400Diagnostic) {
         }
 
         if (-not [string]::IsNullOrWhiteSpace($detectedAs400Path)) {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('AS400: present ({0}).' -f $detectedAs400Path)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AS400: present ({0}).' -f $detectedAs400Path)
         } else {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'AS400: present.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'AS400: present.'
         }
     }
 }
 
-$autovueDiagnostic = Get-MinimalAutovueDiagnosticResult -ExecutionOptions $executionOptions -Config $script:MinimalConfig
+$autovueDiagnostic = Get-WcdAutovueDiagnosticResult -ExecutionOptions $executionOptions -Config $script:WcdConfig
 if ($null -ne $autovueDiagnostic) {
     $diagnosticResults += $autovueDiagnostic
 
-    $autovueSeverity = Get-MinimalResultSeverity -Result $autovueDiagnostic
+    $autovueSeverity = Get-WcdResultSeverity -Result $autovueDiagnostic
     if ($autovueSeverity -eq 'WARNING') {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('AutoVue: {0}' -f $autovueDiagnostic.Error)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AutoVue: {0}' -f $autovueDiagnostic.Error)
     } else {
         $detectedAutovuePath = ''
         if ($null -ne $autovueDiagnostic.PSObject.Properties['Path'] -and -not [string]::IsNullOrWhiteSpace([string]$autovueDiagnostic.Path)) {
@@ -1288,14 +1288,14 @@ if ($null -ne $autovueDiagnostic) {
         }
 
         if (-not [string]::IsNullOrWhiteSpace($detectedAutovuePath)) {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('AutoVue: present ({0}).' -f $detectedAutovuePath)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('AutoVue: present ({0}).' -f $detectedAutovuePath)
         } else {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'AutoVue: present.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'AutoVue: present.'
         }
     }
 }
 
-$checklistEntries = Get-MinimalFinalChecklistEntries -AllResults $diagnosticResults -ExecutionOptions $executionOptions -StepLabels $stepLabels
+$checklistEntries = Get-WcdFinalChecklistEntries -AllResults $diagnosticResults -ExecutionOptions $executionOptions -StepLabels $stepLabels
 $checklistSuccessCount = @($checklistEntries | Where-Object { $_.Kind -eq 'success' }).Count
 $checklistWarningCount = @($checklistEntries | Where-Object { $_.Kind -eq 'warning' }).Count
 $checklistErrorCount = @($checklistEntries | Where-Object { $_.Kind -eq 'error' }).Count
@@ -1303,17 +1303,17 @@ $checklistManualCount = @($checklistEntries | Where-Object { $_.Kind -eq 'manual
 $checklistNaCount = @($checklistEntries | Where-Object { $_.Kind -eq 'na' }).Count
 $summaryLine = $T.SummaryLine -f $checklistSuccessCount, $checklistWarningCount, $checklistErrorCount, $checklistManualCount, $checklistNaCount
 
-Write-MinimalSectionHeader -Title $T.SectionByModule
+Write-WcdSectionHeader -Title $T.SectionByModule
 foreach ($ms in $moduleStatus) {
-    $moduleKind = Get-MinimalModuleStatusKind -Status $ms.Status
-    $moduleColor = (Get-MinimalDiagnosticStyle -Kind $moduleKind).Color
-    Write-Host (Format-MinimalModuleLine -ModuleStatus $ms) -ForegroundColor $moduleColor
+    $moduleKind = Get-WcdModuleStatusKind -Status $ms.Status
+    $moduleColor = (Get-WcdDiagnosticStyle -Kind $moduleKind).Color
+    Write-Host (Format-WcdModuleLine -ModuleStatus $ms) -ForegroundColor $moduleColor
 }
 
-Write-MinimalSectionHeader -Title $T.SectionByStep
+Write-WcdSectionHeader -Title $T.SectionByStep
 foreach ($entry in $checklistEntries) {
-    $entryColor = (Get-MinimalDiagnosticStyle -Kind $entry.Kind).Color
-    Write-Host (Format-MinimalChecklistLine -Entry $entry) -ForegroundColor $entryColor
+    $entryColor = (Get-WcdDiagnosticStyle -Kind $entry.Kind).Color
+    Write-Host (Format-WcdChecklistLine -Entry $entry) -ForegroundColor $entryColor
 }
 
 $summaryColor = if ($checklistErrorCount -gt 0) {
@@ -1326,18 +1326,18 @@ $summaryColor = if ($checklistErrorCount -gt 0) {
 
 Write-Host $summaryLine -ForegroundColor $summaryColor
 
-$finalDiagnosticLines = Get-MinimalFinalDiagnosticLines -ModuleStatus $moduleStatus -ChecklistEntries $checklistEntries -SummaryLine $summaryLine
+$finalDiagnosticLines = Get-WcdFinalDiagnosticLines -ModuleStatus $moduleStatus -ChecklistEntries $checklistEntries -SummaryLine $summaryLine
 
 Write-Host ''
 Write-Host ($T.LogOutput -f $resolvedLogPath) -ForegroundColor Gray
-Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ($T.LogEndSummary -f $checklistSuccessCount, $checklistWarningCount, $checklistErrorCount, $checklistManualCount, $checklistNaCount)
+Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ($T.LogEndSummary -f $checklistSuccessCount, $checklistWarningCount, $checklistErrorCount, $checklistManualCount, $checklistNaCount)
 
 # --- Logiciels optionnels non installes ---
 $optionalSoftware = @()
 
 $sapPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\SAP Front End'
-if ($null -ne $script:MinimalConfig -and $null -ne $script:MinimalConfig.Principal) {
-    $sapPath = $script:MinimalConfig.Principal.SAPPath
+if ($null -ne $script:WcdConfig -and $null -ne $script:WcdConfig.Principal) {
+    $sapPath = $script:WcdConfig.Principal.SAPPath
 }
 if (-not (Test-Path -LiteralPath $sapPath)) {
     $optionalSoftware += [pscustomobject]@{
@@ -1348,8 +1348,8 @@ if (-not (Test-Path -LiteralPath $sapPath)) {
 }
 
 $mfPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Micro Focus'
-if ($null -ne $script:MinimalConfig -and $null -ne $script:MinimalConfig.Applications) {
-    $mfPath = $script:MinimalConfig.Applications.MicroFocus
+if ($null -ne $script:WcdConfig -and $null -ne $script:WcdConfig.Applications) {
+    $mfPath = $script:WcdConfig.Applications.MicroFocus
 }
 if (-not [string]::IsNullOrWhiteSpace($mfPath) -and -not (Test-Path -LiteralPath $mfPath)) {
     $optionalSoftware += [pscustomobject]@{
@@ -1360,9 +1360,9 @@ if (-not [string]::IsNullOrWhiteSpace($mfPath) -and -not (Test-Path -LiteralPath
 }
 
 $avPath = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\AutoVue for Windows\AutoVue.lnk'
-if ($null -ne $script:MinimalConfig -and $null -ne $script:MinimalConfig.Engineer) {
-    if (-not [string]::IsNullOrWhiteSpace($script:MinimalConfig.Engineer.AutovuePath)) {
-        $avPath = $script:MinimalConfig.Engineer.AutovuePath
+if ($null -ne $script:WcdConfig -and $null -ne $script:WcdConfig.Engineer) {
+    if (-not [string]::IsNullOrWhiteSpace($script:WcdConfig.Engineer.AutovuePath)) {
+        $avPath = $script:WcdConfig.Engineer.AutovuePath
     }
 }
 if (-not [string]::IsNullOrWhiteSpace($avPath) -and -not (Test-Path -LiteralPath $avPath)) {
@@ -1389,22 +1389,22 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
     if ($NonInteractive) {
         Write-Host ($T.AutoExportLog -f $HistoryLogPath) -ForegroundColor Cyan
     } else {
-        Wait-MinimalForEnter -Message $T.WaitEnterExport
+        Wait-WcdForEnter -Message $T.WaitEnterExport
     }
 
     try {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Preparation export historique vers: {0}' -f $HistoryLogPath)
-        Export-MinimalHistoryLog -LocalLogPath $resolvedLogPath -HistoryLogPath $HistoryLogPath -DiagnosticLines $finalDiagnosticLines | Out-Null
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Historique exporte vers: {0}' -f $HistoryLogPath)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Preparation export historique vers: {0}' -f $HistoryLogPath)
+        Export-WcdHistoryLog -LocalLogPath $resolvedLogPath -HistoryLogPath $HistoryLogPath -DiagnosticLines $finalDiagnosticLines | Out-Null
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Historique exporte vers: {0}' -f $HistoryLogPath)
         Write-Host ($T.HistoryExported -f $HistoryLogPath) -ForegroundColor Green
     } catch {
         $finalizationExitCode = 2
         $historyError = $_.Exception.Message
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Export historique impossible: {0}' -f $historyError)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Export historique impossible: {0}' -f $historyError)
         Write-Host ($T.HistoryExportFailed -f $historyError) -ForegroundColor Yellow
     }
 } elseif (-not $NonInteractive) {
-    Wait-MinimalForEnter -Message $T.WaitEnterFinish
+    Wait-WcdForEnter -Message $T.WaitEnterFinish
 }
 
 exit $finalizationExitCode

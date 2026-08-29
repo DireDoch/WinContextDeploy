@@ -1,16 +1,10 @@
 Describe 'Config-Network' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        $modulePath  = Join-Path $PSScriptRoot 'Config-Network.ps1'
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
+        $modulePath  = Join-Path $srcDir 'Config-Network.ps1'
 
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
-        if (-not (Test-Path -LiteralPath $modulePath)) {
-            $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/Config-Network.ps1'
-        }
-
-        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'MinimalHelpers.ps1 introuvable.' }
+        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'WcdHelpers.ps1 introuvable.' }
         if (-not (Test-Path -LiteralPath $modulePath))  { throw 'Config-Network.ps1 introuvable.' }
 
         . $helpersPath
@@ -22,7 +16,7 @@ Describe 'Config-Network' {
     It 'retourne OK quand le ping reussit via Wi-Fi et que Refresh My Network Places est lance' {
         $logPath = Join-Path $TestDrive 'log_network_ok.txt'
 
-        Mock -CommandName 'Get-MinimalNetworkAdapters' {
+        Mock -CommandName 'Get-WcdNetworkAdapters' {
             @(
                 [pscustomobject]@{
                     Name                 = 'Wi-Fi'
@@ -35,36 +29,36 @@ Describe 'Config-Network' {
                 }
             )
         }
-        Mock -CommandName 'Get-MinimalAdapterIPv4' { '192.168.1.100' }
-        Mock -CommandName 'Test-MinimalNetworkPing' {
+        Mock -CommandName 'Get-WcdAdapterIPv4' { '192.168.1.100' }
+        Mock -CommandName 'Test-WcdNetworkPing' {
             [pscustomobject]@{ Reachable = $true; Detail = '14 ms' }
         }
-        Mock -CommandName 'Get-MinimalRefreshNetworkPlacesShortcutPath' {
+        Mock -CommandName 'Get-WcdRefreshNetworkPlacesShortcutPath' {
             Join-Path $TestDrive 'Refresh My Network Places.lnk'
         }
-        Mock -CommandName 'Invoke-MinimalNetworkShortcut' {}
+        Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
-        $results = @(Set-MinimalNetworkDiagnostics -LogPath $logPath)
+        $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 3
             ($results | Where-Object Step -eq 'NetworkAdapterEtat').Severity | Should -Be 'INFO'
             ($results | Where-Object Step -eq 'NetworkPing8888').Severity | Should -Be 'INFO'
             ($results | Where-Object Step -eq 'RefreshNetworkPlaces').Severity | Should -Be 'INFO'
-            Assert-MockCalled -CommandName 'Invoke-MinimalNetworkShortcut' -Times 1
+            Assert-MockCalled -CommandName 'Invoke-WcdNetworkShortcut' -Times 1
         } else {
             $results.Count | Should Be 3
             ($results | Where-Object Step -eq 'NetworkAdapterEtat').Severity | Should Be 'INFO'
             ($results | Where-Object Step -eq 'NetworkPing8888').Severity | Should Be 'INFO'
             ($results | Where-Object Step -eq 'RefreshNetworkPlaces').Severity | Should Be 'INFO'
-            Assert-MockCalled 'Invoke-MinimalNetworkShortcut' 1
+            Assert-MockCalled 'Invoke-WcdNetworkShortcut' 1
         }
     }
 
     It 'avertit quand aucun adaptateur reseau pertinent n est actif' {
         $logPath = Join-Path $TestDrive 'log_network_no_adapter.txt'
 
-        Mock -CommandName 'Get-MinimalNetworkAdapters' {
+        Mock -CommandName 'Get-WcdNetworkAdapters' {
             @(
                 [pscustomobject]@{
                     Name                 = 'Intel Ethernet'
@@ -77,32 +71,32 @@ Describe 'Config-Network' {
                 }
             )
         }
-        Mock -CommandName 'Get-MinimalAdapterIPv4' {}
-        Mock -CommandName 'Test-MinimalNetworkPing' {
+        Mock -CommandName 'Get-WcdAdapterIPv4' {}
+        Mock -CommandName 'Test-WcdNetworkPing' {
             throw 'Ne devrait pas etre appele.'
         }
-        Mock -CommandName 'Get-MinimalRefreshNetworkPlacesShortcutPath' { $null }
-        Mock -CommandName 'Invoke-MinimalNetworkShortcut' {}
+        Mock -CommandName 'Get-WcdRefreshNetworkPlacesShortcutPath' { $null }
+        Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
-        $results = @(Set-MinimalNetworkDiagnostics -LogPath $logPath)
+        $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
         $adapterResult = $results | Where-Object Step -eq 'NetworkAdapterEtat'
         $pingResult = $results | Where-Object Step -eq 'NetworkPing8888'
 
         if ($script:PesterMajorVersion -ge 5) {
             $adapterResult.Severity | Should -Be 'WARNING'
             $pingResult.Severity | Should -Be 'WARNING'
-            Assert-MockCalled -CommandName 'Test-MinimalNetworkPing' -Times 0
+            Assert-MockCalled -CommandName 'Test-WcdNetworkPing' -Times 0
         } else {
             $adapterResult.Severity | Should Be 'WARNING'
             $pingResult.Severity | Should Be 'WARNING'
-            Assert-MockCalled 'Test-MinimalNetworkPing' 0
+            Assert-MockCalled 'Test-WcdNetworkPing' 0
         }
     }
 
     It 'avertit quand le ping vers 8.8.8.8 echoue via Wi-Fi' {
         $logPath = Join-Path $TestDrive 'log_network_ping_warning.txt'
 
-        Mock -CommandName 'Get-MinimalNetworkAdapters' {
+        Mock -CommandName 'Get-WcdNetworkAdapters' {
             @(
                 [pscustomobject]@{
                     Name                 = 'Wi-Fi'
@@ -115,16 +109,16 @@ Describe 'Config-Network' {
                 }
             )
         }
-        Mock -CommandName 'Get-MinimalAdapterIPv4' { '192.168.1.100' }
-        Mock -CommandName 'Test-MinimalNetworkPing' {
+        Mock -CommandName 'Get-WcdAdapterIPv4' { '192.168.1.100' }
+        Mock -CommandName 'Test-WcdNetworkPing' {
             [pscustomobject]@{ Reachable = $false; Detail = '' }
         }
-        Mock -CommandName 'Get-MinimalRefreshNetworkPlacesShortcutPath' {
+        Mock -CommandName 'Get-WcdRefreshNetworkPlacesShortcutPath' {
             Join-Path $TestDrive 'Refresh My Network Places.lnk'
         }
-        Mock -CommandName 'Invoke-MinimalNetworkShortcut' {}
+        Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
-        $results = @(Set-MinimalNetworkDiagnostics -LogPath $logPath)
+        $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
         $pingResult = $results | Where-Object Step -eq 'NetworkPing8888'
 
         if ($script:PesterMajorVersion -ge 5) {
@@ -139,7 +133,7 @@ Describe 'Config-Network' {
     It 'avertit quand Refresh My Network Places est introuvable' {
         $logPath = Join-Path $TestDrive 'log_network_refresh_missing.txt'
 
-        Mock -CommandName 'Get-MinimalNetworkAdapters' {
+        Mock -CommandName 'Get-WcdNetworkAdapters' {
             @(
                 [pscustomobject]@{
                     Name                 = 'Wi-Fi'
@@ -152,39 +146,39 @@ Describe 'Config-Network' {
                 }
             )
         }
-        Mock -CommandName 'Get-MinimalAdapterIPv4' { '192.168.1.100' }
-        Mock -CommandName 'Test-MinimalNetworkPing' {
+        Mock -CommandName 'Get-WcdAdapterIPv4' { '192.168.1.100' }
+        Mock -CommandName 'Test-WcdNetworkPing' {
             [pscustomobject]@{ Reachable = $true; Detail = '9 ms' }
         }
-        Mock -CommandName 'Get-MinimalRefreshNetworkPlacesShortcutPath' { $null }
-        Mock -CommandName 'Invoke-MinimalNetworkShortcut' {}
+        Mock -CommandName 'Get-WcdRefreshNetworkPlacesShortcutPath' { $null }
+        Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
-        $results = @(Set-MinimalNetworkDiagnostics -LogPath $logPath)
+        $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
         $refreshResult = $results | Where-Object Step -eq 'RefreshNetworkPlaces'
 
         if ($script:PesterMajorVersion -ge 5) {
             $refreshResult.Severity | Should -Be 'WARNING'
             $refreshResult.Error | Should -Match 'introuvable'
-            Assert-MockCalled -CommandName 'Invoke-MinimalNetworkShortcut' -Times 0
+            Assert-MockCalled -CommandName 'Invoke-WcdNetworkShortcut' -Times 0
         } else {
             $refreshResult.Severity | Should Be 'WARNING'
             $refreshResult.Error | Should Match 'introuvable'
-            Assert-MockCalled 'Invoke-MinimalNetworkShortcut' 0
+            Assert-MockCalled 'Invoke-WcdNetworkShortcut' 0
         }
     }
 
     It 'retourne une erreur d inventaire si les adaptateurs ne peuvent pas etre lus' {
         $logPath = Join-Path $TestDrive 'log_network_inventory_error.txt'
 
-        Mock -CommandName 'Get-MinimalNetworkAdapters' { throw 'WMI indisponible' }
-        Mock -CommandName 'Get-MinimalAdapterIPv4' {}
-        Mock -CommandName 'Test-MinimalNetworkPing' {}
-        Mock -CommandName 'Get-MinimalRefreshNetworkPlacesShortcutPath' {
+        Mock -CommandName 'Get-WcdNetworkAdapters' { throw 'WMI indisponible' }
+        Mock -CommandName 'Get-WcdAdapterIPv4' {}
+        Mock -CommandName 'Test-WcdNetworkPing' {}
+        Mock -CommandName 'Get-WcdRefreshNetworkPlacesShortcutPath' {
             Join-Path $TestDrive 'Refresh My Network Places.lnk'
         }
-        Mock -CommandName 'Invoke-MinimalNetworkShortcut' {}
+        Mock -CommandName 'Invoke-WcdNetworkShortcut' {}
 
-        $results = @(Set-MinimalNetworkDiagnostics -LogPath $logPath)
+        $results = @(Set-WcdNetworkDiagnostics -LogPath $logPath)
         $adapterResult = $results | Where-Object Step -eq 'NetworkAdapterEtat'
         $pingResult = $results | Where-Object Step -eq 'NetworkPing8888'
 
@@ -193,13 +187,13 @@ Describe 'Config-Network' {
             $adapterResult.Severity | Should -Be 'ERROR'
             $adapterResult.Error | Should -Match 'WMI indisponible'
             $pingResult.Severity | Should -Be 'WARNING'
-            Assert-MockCalled -CommandName 'Test-MinimalNetworkPing' -Times 0
+            Assert-MockCalled -CommandName 'Test-WcdNetworkPing' -Times 0
         } else {
             $adapterResult.Success | Should Be $false
             $adapterResult.Severity | Should Be 'ERROR'
             $adapterResult.Error | Should Match 'WMI indisponible'
             $pingResult.Severity | Should Be 'WARNING'
-            Assert-MockCalled 'Test-MinimalNetworkPing' 0
+            Assert-MockCalled 'Test-WcdNetworkPing' 0
         }
     }
 }

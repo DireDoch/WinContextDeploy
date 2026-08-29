@@ -12,7 +12,7 @@ imaging pipeline; this tool verifies they are there and puts them in front of th
 technician.
 
 > Running this changes system settings (taskbar, regional separators, power plan,
-> keyboard/language). Read `tests/Config-Paths.psd1` and adjust the paths to your
+> keyboard/language). Read `WinContextDeploy.psd1` and adjust the paths to your
 > environment before first use.
 
 ## Requirements
@@ -42,14 +42,14 @@ endpoint skips the locally installed line-of-business checks.
 Or run it directly:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1
-powershell -ExecutionPolicy Bypass -File .\tests\Run-AllConfigurations.ps1 `
+powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1
+powershell -ExecutionPolicy Bypass -File .\src\Invoke-WcdConfiguration.ps1 `
     -Language en-US -DeviceType Bureau -Usage Principal -NonInteractive
 ```
 
 ## Configuration
 
-All environment-specific paths and URLs live in `tests/Config-Paths.psd1`. Edit
+All environment-specific paths and URLs live in `WinContextDeploy.psd1`. Edit
 that file rather than the scripts — application shortcuts, portal URLs, and
 process names are all resolved from it at runtime, with sensible fallbacks when a
 key is absent.
@@ -63,7 +63,7 @@ console window, a plain text title is shown instead.
 
 ## Logs
 
-- A timestamped log is written during the run (`tests/log.txt` by default;
+- A timestamped log is written during the run (`src/log.txt` by default;
   override with `-LogPath`).
 - With `-HistoryLogPath`, a summary block is appended to a second file at the end
   of the run — useful for keeping one running record across every machine you
@@ -81,14 +81,15 @@ Or double-click `Lancer-Tests-Pester.cmd`.
 
 ```
 banner.txt                        <- startup logo (editable)
+WinContextDeploy.psd1             <- paths and URLs (edit this)
 Lancer-WinContextDeploy.cmd       <- entry point, French UI
 Start-WinContextDeploy.cmd        <- entry point, English UI
-tests/
-  Run-AllConfigurations.ps1       <- orchestrator
-  MinimalHelpers.ps1              <- shared functions
-  Config-Paths.psd1               <- paths and URLs
+src/
+  Invoke-WcdConfiguration.ps1     <- orchestrator
+  WcdHelpers.ps1                  <- shared functions
   Config-*.ps1                    <- configuration modules
-  Config-*.Tests.ps1              <- Pester tests
+tests/
+  *.Tests.ps1                     <- Pester tests
 ```
 
 ## License

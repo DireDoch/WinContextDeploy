@@ -4,20 +4,20 @@ setlocal EnableExtensions
 set "SOURCE_DIR=%~dp0"
 if "%SOURCE_DIR:~-1%"=="\" set "SOURCE_DIR=%SOURCE_DIR:~0,-1%"
 
-set "PROJECT_MARKER=%SOURCE_DIR%\tests\Config-Paths.psd1"
-set "SCRIPT_MARKER=%SOURCE_DIR%\tests\Run-AllConfigurations.ps1"
+set "PROJECT_MARKER=%SOURCE_DIR%\WinContextDeploy.psd1"
+set "SCRIPT_MARKER=%SOURCE_DIR%\src\Invoke-WcdConfiguration.ps1"
 set "TEMP_ROOT=C:\Temp"
 set "TARGET_DIR=%TEMP_ROOT%\WinContextDeploy"
 set "HISTORY_LOG=%SOURCE_DIR%\log.txt"
 
 if not exist "%PROJECT_MARKER%" (
-    echo [ERREUR] tests\Config-Paths.psd1 introuvable dans la cle USB.
+    echo [ERREUR] WinContextDeploy.psd1 introuvable dans la cle USB.
     pause
     exit /b 1
 )
 
 if not exist "%SCRIPT_MARKER%" (
-    echo [ERREUR] tests\Run-AllConfigurations.ps1 introuvable dans la cle USB.
+    echo [ERREUR] src\Invoke-WcdConfiguration.ps1 introuvable dans la cle USB.
     pause
     exit /b 1
 )
@@ -65,7 +65,7 @@ echo === Execution depuis la copie locale ===
 echo Le script PowerShell interactif demarre dans cette fenetre.
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TARGET_DIR%\tests\Run-AllConfigurations.ps1" -HistoryLogPath "%HISTORY_LOG%" -LocalProjectRoot "%TARGET_DIR%" -UsbSourceRoot "%SOURCE_DIR%"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TARGET_DIR%\src\Invoke-WcdConfiguration.ps1" -HistoryLogPath "%HISTORY_LOG%" -LocalProjectRoot "%TARGET_DIR%" -UsbSourceRoot "%SOURCE_DIR%"
 set "SCRIPT_EXIT=%ERRORLEVEL%"
 
 echo.

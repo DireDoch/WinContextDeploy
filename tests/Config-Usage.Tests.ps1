@@ -1,16 +1,10 @@
 Describe 'Config-Usage' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        $modulePath  = Join-Path $PSScriptRoot 'Config-Usage.ps1'
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
+        $modulePath  = Join-Path $srcDir 'Config-Usage.ps1'
 
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
-        if (-not (Test-Path -LiteralPath $modulePath)) {
-            $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/Config-Usage.ps1'
-        }
-
-        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'MinimalHelpers.ps1 introuvable.' }
+        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'WcdHelpers.ps1 introuvable.' }
         if (-not (Test-Path -LiteralPath $modulePath))  { throw 'Config-Usage.ps1 introuvable.' }
 
         . $helpersPath
@@ -31,30 +25,30 @@ Describe 'Config-Usage' {
     It 'retourne 1 etape pour un poste principal (SAP)' {
         $logPath = Join-Path $TestDrive 'log_usage_principal.txt'
 
-        Mock -CommandName 'Open-MinimalExplorer' {}
-        Mock -CommandName 'Open-MinimalUrl' {}
+        Mock -CommandName 'Open-WcdExplorer' {}
+        Mock -CommandName 'Open-WcdUrl' {}
 
         # Creer le dossier SAP de test
         New-Item -Path (Join-Path $TestDrive 'SAP') -ItemType Directory -Force | Out-Null
 
-        $results = @(Set-MinimalUsageConfiguration -Usage 'Principal' -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdUsageConfiguration -Usage 'Principal' -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1
             $results[0].Step | Should -Be 'SAPFrontEnd'
             $results[0].Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Open-MinimalExplorer' -Times 1
+            Assert-MockCalled -CommandName 'Open-WcdExplorer' -Times 1
         } else {
             $results.Count | Should Be 1
             $results[0].Step | Should Be 'SAPFrontEnd'
-            Assert-MockCalled 'Open-MinimalExplorer' 1
+            Assert-MockCalled 'Open-WcdExplorer' 1
         }
     }
 
     It 'avertit quand SAP est introuvable sur un poste principal' {
         $logPath = Join-Path $TestDrive 'log_usage_nosap.txt'
 
-        Mock -CommandName 'Open-MinimalExplorer' {}
+        Mock -CommandName 'Open-WcdExplorer' {}
 
         $noSapConfig = @{
             Principal = @{
@@ -62,7 +56,7 @@ Describe 'Config-Usage' {
             }
         }
 
-        $results = @(Set-MinimalUsageConfiguration -Usage 'Principal' -LogPath $logPath -Config $noSapConfig)
+        $results = @(Set-WcdUsageConfiguration -Usage 'Principal' -LogPath $logPath -Config $noSapConfig)
         $sapResult = $results | Where-Object { $_.Step -eq 'SAPFrontEnd' }
 
         if ($script:PesterMajorVersion -ge 5) {
@@ -80,29 +74,29 @@ Describe 'Config-Usage' {
     It 'ouvre Citrix pour un poste secondaire' {
         $logPath = Join-Path $TestDrive 'log_usage_secondaire.txt'
 
-        Mock -CommandName 'Open-MinimalUrl' {}
+        Mock -CommandName 'Open-WcdUrl' {}
 
-        $results = @(Set-MinimalUsageConfiguration -Usage 'Secondaire' -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdUsageConfiguration -Usage 'Secondaire' -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 1
             $results[0].Step | Should -Be 'UsageCitrix'
             $results[0].Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Open-MinimalUrl' -Times 1 -ParameterFilter { $Url -eq 'https://example.com/citrix' }
+            Assert-MockCalled -CommandName 'Open-WcdUrl' -Times 1 -ParameterFilter { $Url -eq 'https://example.com/citrix' }
         } else {
             $results.Count | Should Be 1
             $results[0].Step | Should Be 'UsageCitrix'
             $results[0].Success | Should Be $true
-            Assert-MockCalled 'Open-MinimalUrl' 1
+            Assert-MockCalled 'Open-WcdUrl' 1
         }
     }
 
     It 'retourne une erreur si Citrix ne peut pas etre ouvert' {
         $logPath = Join-Path $TestDrive 'log_usage_error.txt'
 
-        Mock -CommandName 'Open-MinimalUrl' { throw 'Navigation bloquee' }
+        Mock -CommandName 'Open-WcdUrl' { throw 'Navigation bloquee' }
 
-        $results = @(Set-MinimalUsageConfiguration -Usage 'Secondaire' -LogPath $logPath -Config $script:TestConfig)
+        $results = @(Set-WcdUsageConfiguration -Usage 'Secondaire' -LogPath $logPath -Config $script:TestConfig)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results[0].Success | Should -BeFalse

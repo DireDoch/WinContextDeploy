@@ -7,7 +7,7 @@
     Lance le raccourci .lnk du gestionnaire d'imprimantes. Si l'ajout est refuse
     par l'utilisateur ou si le raccourci est introuvable, retourne un resultat
     explicite sans lever d'exception.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER AddPrinter
     Si $false, l'ouverture est ignoree et un resultat 'PrinterSkip' est retourne.
@@ -15,10 +15,10 @@
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .PARAMETER Config
-    Hashtable de configuration importee depuis Config-Paths.psd1.
+    Hashtable de configuration importee depuis WinContextDeploy.psd1.
     Permet de surcharger le chemin par defaut du raccourci.
 
 .OUTPUTS
@@ -26,7 +26,7 @@
     Success, Error.
 #>
 
-function Open-MinimalPrinterTool {
+function Open-WcdPrinterTool {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -36,7 +36,7 @@ function Open-MinimalPrinterTool {
     Start-Process $Path -ErrorAction Stop
 }
 
-function Set-MinimalPrinterConfiguration {
+function Set-WcdPrinterConfiguration {
     [CmdletBinding()]
     param(
         [bool]$AddPrinter = $true,
@@ -44,10 +44,10 @@ function Set-MinimalPrinterConfiguration {
         [hashtable]$Config
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
 
     if (-not $AddPrinter) {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Imprimante: ajout refuse par l utilisateur.'
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Imprimante: ajout refuse par l utilisateur.'
         return [pscustomobject]@{ Step = 'PrinterSkip'; Success = $true; Error = '' }
     }
 
@@ -58,15 +58,15 @@ function Set-MinimalPrinterConfiguration {
 
     try {
         if (-not (Test-Path -LiteralPath $printerPath)) {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message 'Imprimante: Find and add Printer introuvable.'
+            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message 'Imprimante: Find and add Printer introuvable.'
             return [pscustomobject]@{ Step = 'PrinterAdd'; Success = $false; Error = 'Find and add Printer introuvable.' }
         }
 
-        Open-MinimalPrinterTool -Path $printerPath
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Imprimante: Find and add Printer ouvert.'
+        Open-WcdPrinterTool -Path $printerPath
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Imprimante: Find and add Printer ouvert.'
         return [pscustomobject]@{ Step = 'PrinterAdd'; Success = $true; Error = '' }
     } catch {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Imprimante: {0}' -f $_.Exception.Message)
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Imprimante: {0}' -f $_.Exception.Message)
         return [pscustomobject]@{ Step = 'PrinterAdd'; Success = $false; Error = $_.Exception.Message }
     }
 }

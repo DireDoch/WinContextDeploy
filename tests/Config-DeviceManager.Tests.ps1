@@ -1,16 +1,10 @@
 Describe 'Config-DeviceManager' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        $modulePath  = Join-Path $PSScriptRoot 'Config-DeviceManager.ps1'
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
+        $modulePath  = Join-Path $srcDir 'Config-DeviceManager.ps1'
 
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
-        if (-not (Test-Path -LiteralPath $modulePath)) {
-            $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/Config-DeviceManager.ps1'
-        }
-
-        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'MinimalHelpers.ps1 introuvable.' }
+        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'WcdHelpers.ps1 introuvable.' }
         if (-not (Test-Path -LiteralPath $modulePath))  { throw 'Config-DeviceManager.ps1 introuvable.' }
 
         . $helpersPath
@@ -22,14 +16,14 @@ Describe 'Config-DeviceManager' {
     It 'retourne OK quand aucun peripherique n a de probleme' {
         $logPath = Join-Path $TestDrive 'log_device_ok.txt'
 
-        Mock -CommandName 'Get-MinimalPnPDevices' {
+        Mock -CommandName 'Get-WcdPnPDevices' {
             @(
                 [pscustomobject]@{ Name = 'Intel Wi-Fi'; ConfigManagerErrorCode = 0; PNPDeviceID = 'PCI\\VEN_OK' }
                 [pscustomobject]@{ Name = 'NVIDIA Audio'; ConfigManagerErrorCode = 0; PNPDeviceID = 'PCI\\VEN_OK2' }
             )
         }
 
-        $result = Set-MinimalDeviceManagerStatus -LogPath $logPath
+        $result = Set-WcdDeviceManagerStatus -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeTrue
@@ -47,13 +41,13 @@ Describe 'Config-DeviceManager' {
     It 'retourne warning quand seuls des avertissements sont detectes' {
         $logPath = Join-Path $TestDrive 'log_device_warning.txt'
 
-        Mock -CommandName 'Get-MinimalPnPDevices' {
+        Mock -CommandName 'Get-WcdPnPDevices' {
             @(
                 [pscustomobject]@{ Name = 'USB Dock'; ConfigManagerErrorCode = 45; PNPDeviceID = 'USB\\WARN2' }
             )
         }
 
-        $result = Set-MinimalDeviceManagerStatus -LogPath $logPath
+        $result = Set-WcdDeviceManagerStatus -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeTrue
@@ -71,13 +65,13 @@ Describe 'Config-DeviceManager' {
     It 'ignore PANGP Virtual Ethernet Adapter en code 22' {
         $logPath = Join-Path $TestDrive 'log_device_ignore_pangp.txt'
 
-        Mock -CommandName 'Get-MinimalPnPDevices' {
+        Mock -CommandName 'Get-WcdPnPDevices' {
             @(
                 [pscustomobject]@{ Name = 'PANGP Virtual Ethernet Adapter Secure'; ConfigManagerErrorCode = 22; PNPDeviceID = 'ROOT\\NET\\0001' }
             )
         }
 
-        $result = Set-MinimalDeviceManagerStatus -LogPath $logPath
+        $result = Set-WcdDeviceManagerStatus -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeTrue
@@ -95,14 +89,14 @@ Describe 'Config-DeviceManager' {
     It 'retourne erreur quand au moins un peripherique est en erreur' {
         $logPath = Join-Path $TestDrive 'log_device_error.txt'
 
-        Mock -CommandName 'Get-MinimalPnPDevices' {
+        Mock -CommandName 'Get-WcdPnPDevices' {
             @(
                 [pscustomobject]@{ Name = 'Audio Controller'; ConfigManagerErrorCode = 28; PNPDeviceID = 'PCI\\ERR1' }
                 [pscustomobject]@{ Name = 'USB Dock'; ConfigManagerErrorCode = 45; PNPDeviceID = 'USB\\WARN2' }
             )
         }
 
-        $result = Set-MinimalDeviceManagerStatus -LogPath $logPath
+        $result = Set-WcdDeviceManagerStatus -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeFalse
@@ -120,9 +114,9 @@ Describe 'Config-DeviceManager' {
     It 'retourne erreur si interrogation CIM impossible' {
         $logPath = Join-Path $TestDrive 'log_device_cim_error.txt'
 
-        Mock -CommandName 'Get-MinimalPnPDevices' { throw 'CIM indisponible' }
+        Mock -CommandName 'Get-WcdPnPDevices' { throw 'CIM indisponible' }
 
-        $result = Set-MinimalDeviceManagerStatus -LogPath $logPath
+        $result = Set-WcdDeviceManagerStatus -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeFalse

@@ -1,12 +1,10 @@
-Describe 'MinimalHelpers' {
+Describe 'WcdHelpers' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
 
         if (-not (Test-Path -LiteralPath $helpersPath)) {
-            throw 'MinimalHelpers.ps1 introuvable.'
+            throw 'WcdHelpers.ps1 introuvable.'
         }
 
         . $helpersPath
@@ -17,7 +15,7 @@ Describe 'MinimalHelpers' {
         $logPath = Join-Path $TestDrive 'local-log.txt'
         Set-Content -Path $logPath -Value 'ancien contenu' -Encoding UTF8
 
-        Initialize-MinimalLog -Path $logPath
+        Initialize-WcdLog -Path $logPath
         $content = Get-Content -Path $logPath -Raw
 
         if ($script:PesterMajorVersion -ge 5) {
@@ -44,7 +42,7 @@ Describe 'MinimalHelpers' {
         Mock -CommandName 'Get-CimInstance' { [pscustomobject]@{ SerialNumber = 'CCMP234' } } -ParameterFilter { $ClassName -eq 'Win32_Bios' }
         Mock -CommandName 'Get-CimInstance' { [pscustomobject]@{ Model = 'Latitude 5550' } } -ParameterFilter { $ClassName -eq 'Win32_ComputerSystem' }
 
-        $resultPath = Export-MinimalHistoryLog -LocalLogPath $localLogPath -HistoryLogPath $historyLogPath -DiagnosticLines $diagnosticLines
+        $resultPath = Export-WcdHistoryLog -LocalLogPath $localLogPath -HistoryLogPath $historyLogPath -DiagnosticLines $diagnosticLines
         $content = Get-Content -Path $historyLogPath -Raw
 
         if ($script:PesterMajorVersion -ge 5) {
@@ -81,7 +79,7 @@ Describe 'MinimalHelpers' {
     }
 
     It 'construit une barre de progression ASCII lisible' {
-        $bar = Format-MinimalAsciiProgressBar -CompletedSteps 3 -TotalSteps 10
+        $bar = Format-WcdAsciiProgressBar -CompletedSteps 3 -TotalSteps 10
 
         if ($script:PesterMajorVersion -ge 5) {
             $bar | Should -Match '\[.*\]'
@@ -104,7 +102,7 @@ Describe 'MinimalHelpers' {
             EngineerTypes = @('Non')
         }
 
-        $plan = Get-MinimalModuleProgressPlan -ExecutionOptions $executionOptions
+        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions
 
         if ($script:PesterMajorVersion -ge 5) {
             $plan['Config-Power'] | Should -Be @('EcranSecteur15min', 'SetActiveSchemeCurrent')

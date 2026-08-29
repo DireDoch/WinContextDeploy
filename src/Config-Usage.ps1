@@ -7,7 +7,7 @@
     En mode Principal, ouvre le dossier SAP Front End dans l'Explorateur Windows.
     En mode Secondaire, ouvre la page de telechargement Citrix dans le navigateur
     par defaut.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER Usage
     Mode d'utilisation. Valeurs acceptees: 'Principal', 'Secondaire'.
@@ -15,10 +15,10 @@
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .PARAMETER Config
-    Hashtable de configuration importee depuis Config-Paths.psd1.
+    Hashtable de configuration importee depuis WinContextDeploy.psd1.
     Permet de surcharger les chemins et URLs par defaut.
 
 .PARAMETER ProgressCallback
@@ -28,7 +28,7 @@
     [pscustomobject[]] — tableau de resultats avec Step, Success, Error.
 #>
 
-function Open-MinimalUrl {
+function Open-WcdUrl {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -38,7 +38,7 @@ function Open-MinimalUrl {
     Start-Process $Url -ErrorAction Stop
 }
 
-function Open-MinimalExplorer {
+function Open-WcdExplorer {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -48,7 +48,7 @@ function Open-MinimalExplorer {
     Start-Process 'explorer.exe' -ArgumentList $FolderPath -ErrorAction Stop
 }
 
-function Set-MinimalUsageConfiguration {
+function Set-WcdUsageConfiguration {
     [CmdletBinding()]
     param(
         [ValidateSet('Principal', 'Secondaire')]
@@ -58,7 +58,7 @@ function Set-MinimalUsageConfiguration {
         [scriptblock]$ProgressCallback
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $results = @()
     $moduleName = 'Config-Usage'
 
@@ -70,14 +70,14 @@ function Set-MinimalUsageConfiguration {
         }
 
         try {
-            Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Start'
-            Open-MinimalUrl -Url $citrixUrl
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Usage: poste secondaire, page Citrix ouverte.'
-            Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Finish' -Kind 'success'
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Start'
+            Open-WcdUrl -Url $citrixUrl
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Usage: poste secondaire, page Citrix ouverte.'
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'UsageCitrix'; Success = $true; Error = '' }
         } catch {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Usage Citrix: {0}' -f $_.Exception.Message)
-            Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Finish' -Kind 'error'
+            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Usage Citrix: {0}' -f $_.Exception.Message)
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'UsageCitrix' -Event 'Finish' -Kind 'error'
             $results += [pscustomobject]@{ Step = 'UsageCitrix'; Success = $false; Error = $_.Exception.Message }
         }
 
@@ -91,20 +91,20 @@ function Set-MinimalUsageConfiguration {
     }
 
     try {
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Start'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Start'
         if (Test-Path -LiteralPath $sapPath) {
-            Open-MinimalExplorer -FolderPath $sapPath
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'SAP: dossier ouvert dans l explorateur.'
-            Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'success'
+            Open-WcdExplorer -FolderPath $sapPath
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'SAP: dossier ouvert dans l explorateur.'
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'success'
             $results += [pscustomobject]@{ Step = 'SAPFrontEnd'; Success = $true; Error = '' }
         } else {
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'SAP: dossier introuvable, avertissement.'
-            Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'warning'
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'SAP: dossier introuvable, avertissement.'
+            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'warning'
             $results += [pscustomobject]@{ Step = 'SAPFrontEnd'; Success = $true; Error = 'SAP Front End introuvable sur ce poste.'; Severity = 'WARNING' }
         }
     } catch {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ('SAP: {0}' -f $_.Exception.Message)
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('SAP: {0}' -f $_.Exception.Message)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'SAPFrontEnd' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'SAPFrontEnd'; Success = $false; Error = $_.Exception.Message }
     }
 

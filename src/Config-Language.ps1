@@ -8,7 +8,7 @@
     et configure la culture, la region et les parametres regionaux systeme.
     Certaines commandes (Set-WinSystemLocale, Set-WinHomeLocation) peuvent
     necessiter des privileges administrateur.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER Culture
     Code de culture cible. Valeurs acceptees: 'fr-CA', 'en-US'.
@@ -16,7 +16,7 @@
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .PARAMETER ProgressCallback
     Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
@@ -25,7 +25,7 @@
     [pscustomobject[]] — tableau de resultats avec Step, Success, Error.
 #>
 
-function Get-MinimalLanguageProfile {
+function Get-WcdLanguageProfile {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -57,7 +57,7 @@ function Get-MinimalLanguageProfile {
     }
 }
 
-function New-MinimalLanguageList {
+function New-WcdLanguageList {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -90,7 +90,7 @@ function New-MinimalLanguageList {
     return $languageList
 }
 
-function Set-MinimalLanguageList {
+function Set-WcdLanguageList {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -105,7 +105,7 @@ function Set-MinimalLanguageList {
     Set-WinUserLanguageList -LanguageList $LanguageList -Force -ErrorAction Stop -WarningAction SilentlyContinue
 }
 
-function Set-MinimalKeyboardOverride {
+function Set-WcdKeyboardOverride {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -120,7 +120,7 @@ function Set-MinimalKeyboardOverride {
     Set-WinDefaultInputMethodOverride -InputTip $InputTip -ErrorAction Stop -WarningAction SilentlyContinue
 }
 
-function Set-MinimalLocaleOverrides {
+function Set-WcdLocaleOverrides {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -137,14 +137,14 @@ function Set-MinimalLocaleOverrides {
     if ($setUiLanguageCommand) {
         Set-WinUILanguageOverride -Language $Culture -ErrorAction Stop -WarningAction SilentlyContinue
     } else {
-        Write-MinimalLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinUILanguageOverride indisponible: override UI non applique.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinUILanguageOverride indisponible: override UI non applique.'
     }
 
     $setCultureCommand = Get-Command -Name 'Set-Culture' -ErrorAction SilentlyContinue
     if ($setCultureCommand) {
         Set-Culture -CultureInfo $Culture -ErrorAction Stop
     } else {
-        Write-MinimalLog -Path $LogPath -Level 'WARNING' -Message 'Set-Culture indisponible: culture utilisateur non appliquee.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-Culture indisponible: culture utilisateur non appliquee.'
     }
 
     $setSystemLocaleCommand = Get-Command -Name 'Set-WinSystemLocale' -ErrorAction SilentlyContinue
@@ -152,10 +152,10 @@ function Set-MinimalLocaleOverrides {
         try {
             Set-WinSystemLocale -SystemLocale $Culture -ErrorAction Stop -WarningAction SilentlyContinue
         } catch {
-            Write-MinimalLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinSystemLocale non applique ({0}). Executer en administrateur si necessaire.' -f $_.Exception.Message)
+            Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinSystemLocale non applique ({0}). Executer en administrateur si necessaire.' -f $_.Exception.Message)
         }
     } else {
-        Write-MinimalLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinSystemLocale indisponible: locale systeme non appliquee.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinSystemLocale indisponible: locale systeme non appliquee.'
     }
 
     $setHomeLocationCommand = Get-Command -Name 'Set-WinHomeLocation' -ErrorAction SilentlyContinue
@@ -163,14 +163,14 @@ function Set-MinimalLocaleOverrides {
         try {
             Set-WinHomeLocation -GeoId $GeoId -ErrorAction Stop
         } catch {
-            Write-MinimalLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinHomeLocation non applique ({0}).' -f $_.Exception.Message)
+            Write-WcdLog -Path $LogPath -Level 'WARNING' -Message ('Set-WinHomeLocation non applique ({0}).' -f $_.Exception.Message)
         }
     } else {
-        Write-MinimalLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinHomeLocation indisponible: region non appliquee.'
+        Write-WcdLog -Path $LogPath -Level 'WARNING' -Message 'Set-WinHomeLocation indisponible: region non appliquee.'
     }
 }
 
-function Set-MinimalLanguageConfiguration {
+function Set-WcdLanguageConfiguration {
     [CmdletBinding()]
     param(
         [ValidateSet('fr-CA', 'en-US')]
@@ -179,40 +179,40 @@ function Set-MinimalLanguageConfiguration {
         [scriptblock]$ProgressCallback
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
-    $profile = Get-MinimalLanguageProfile -Culture $Culture
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
+    $profile = Get-WcdLanguageProfile -Culture $Culture
     $results = @()
     $moduleName = 'Config-Language'
 
     try {
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Start'
-        $languageList = New-MinimalLanguageList -Culture $profile.Culture -FallbackCultures $profile.FallbackCultures
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Start'
+        $languageList = New-WcdLanguageList -Culture $profile.Culture -FallbackCultures $profile.FallbackCultures
         if ($languageList.Count -gt 0 -and $null -ne $languageList[0].PSObject.Properties['InputMethodTips']) {
             $languageList[0].InputMethodTips.Clear()
             [void]$languageList[0].InputMethodTips.Add($profile.KeyboardTip)
         }
 
-        Set-MinimalLanguageList -LanguageList $languageList
-        Set-MinimalLocaleOverrides -Culture $profile.Culture -GeoId $profile.GeoId -LogPath $resolvedLogPath
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Langue: {0} appliquee.' -f $profile.LanguageLabel)
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Certaines applications UWP peuvent necessiter une deconnexion/reconnexion pour afficher la nouvelle langue.'
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Finish' -Kind 'success'
+        Set-WcdLanguageList -LanguageList $languageList
+        Set-WcdLocaleOverrides -Culture $profile.Culture -GeoId $profile.GeoId -LogPath $resolvedLogPath
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Langue: {0} appliquee.' -f $profile.LanguageLabel)
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Certaines applications UWP peuvent necessiter une deconnexion/reconnexion pour afficher la nouvelle langue.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'LangueWindows'; Success = $true; Error = '' }
     } catch {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Langue Windows: {0}' -f $_.Exception.Message)
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Langue Windows: {0}' -f $_.Exception.Message)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'LangueWindows' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'LangueWindows'; Success = $false; Error = $_.Exception.Message }
     }
 
     try {
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Start'
-        Set-MinimalKeyboardOverride -InputTip $profile.KeyboardTip
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Clavier: {0} applique.' -f $profile.KeyboardLabel)
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Finish' -Kind 'success'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Start'
+        Set-WcdKeyboardOverride -InputTip $profile.KeyboardTip
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Clavier: {0} applique.' -f $profile.KeyboardLabel)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'ClavierWindows'; Success = $true; Error = '' }
     } catch {
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Clavier Windows: {0}' -f $_.Exception.Message)
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Clavier Windows: {0}' -f $_.Exception.Message)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'ClavierWindows' -Event 'Finish' -Kind 'error'
         $results += [pscustomobject]@{ Step = 'ClavierWindows'; Success = $false; Error = $_.Exception.Message }
     }
 

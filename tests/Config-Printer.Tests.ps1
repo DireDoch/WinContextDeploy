@@ -1,16 +1,10 @@
 Describe 'Config-Printer' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        $modulePath  = Join-Path $PSScriptRoot 'Config-Printer.ps1'
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
+        $modulePath  = Join-Path $srcDir 'Config-Printer.ps1'
 
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
-        if (-not (Test-Path -LiteralPath $modulePath)) {
-            $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/Config-Printer.ps1'
-        }
-
-        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'MinimalHelpers.ps1 introuvable.' }
+        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'WcdHelpers.ps1 introuvable.' }
         if (-not (Test-Path -LiteralPath $modulePath))  { throw 'Config-Printer.ps1 introuvable.' }
 
         . $helpersPath
@@ -22,18 +16,18 @@ Describe 'Config-Printer' {
     It 'ne fait rien quand AddPrinter est false' {
         $logPath = Join-Path $TestDrive 'log_printer_skip.txt'
 
-        Mock -CommandName 'Open-MinimalPrinterTool' {}
+        Mock -CommandName 'Open-WcdPrinterTool' {}
 
-        $result = Set-MinimalPrinterConfiguration -AddPrinter $false -LogPath $logPath
+        $result = Set-WcdPrinterConfiguration -AddPrinter $false -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Step | Should -Be 'PrinterSkip'
             $result.Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Open-MinimalPrinterTool' -Times 0
+            Assert-MockCalled -CommandName 'Open-WcdPrinterTool' -Times 0
         } else {
             $result.Step | Should Be 'PrinterSkip'
             $result.Success | Should Be $true
-            Assert-MockCalled 'Open-MinimalPrinterTool' 0
+            Assert-MockCalled 'Open-WcdPrinterTool' 0
         }
     }
 
@@ -42,7 +36,7 @@ Describe 'Config-Printer' {
         $fakePrinterPath = Join-Path $TestDrive 'Find and add Printer.lnk'
         New-Item -Path $fakePrinterPath -ItemType File -Force | Out-Null
 
-        Mock -CommandName 'Open-MinimalPrinterTool' {}
+        Mock -CommandName 'Open-WcdPrinterTool' {}
 
         $config = @{
             Printer = @{
@@ -50,23 +44,23 @@ Describe 'Config-Printer' {
             }
         }
 
-        $result = Set-MinimalPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
+        $result = Set-WcdPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Step | Should -Be 'PrinterAdd'
             $result.Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Open-MinimalPrinterTool' -Times 1
+            Assert-MockCalled -CommandName 'Open-WcdPrinterTool' -Times 1
         } else {
             $result.Step | Should Be 'PrinterAdd'
             $result.Success | Should Be $true
-            Assert-MockCalled 'Open-MinimalPrinterTool' 1
+            Assert-MockCalled 'Open-WcdPrinterTool' 1
         }
     }
 
     It 'retourne une erreur quand le raccourci est introuvable' {
         $logPath = Join-Path $TestDrive 'log_printer_missing.txt'
 
-        Mock -CommandName 'Open-MinimalPrinterTool' {}
+        Mock -CommandName 'Open-WcdPrinterTool' {}
 
         $config = @{
             Printer = @{
@@ -74,7 +68,7 @@ Describe 'Config-Printer' {
             }
         }
 
-        $result = Set-MinimalPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
+        $result = Set-WcdPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Step | Should -Be 'PrinterAdd'
@@ -92,7 +86,7 @@ Describe 'Config-Printer' {
         $fakePrinterPath = Join-Path $TestDrive 'FindPrinterError.lnk'
         New-Item -Path $fakePrinterPath -ItemType File -Force | Out-Null
 
-        Mock -CommandName 'Open-MinimalPrinterTool' { throw 'Acces refuse' }
+        Mock -CommandName 'Open-WcdPrinterTool' { throw 'Acces refuse' }
 
         $config = @{
             Printer = @{
@@ -100,7 +94,7 @@ Describe 'Config-Printer' {
             }
         }
 
-        $result = Set-MinimalPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
+        $result = Set-WcdPrinterConfiguration -AddPrinter $true -LogPath $logPath -Config $config
 
         if ($script:PesterMajorVersion -ge 5) {
             $result.Success | Should -BeFalse

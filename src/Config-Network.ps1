@@ -9,18 +9,18 @@
     Bluetooth, loopback, VPN, etc.), puis effectue un ping 8.8.8.8 avec source
     forcee (-S) sur l'adaptateur Wi-Fi. Tente ensuite de lancer le raccourci
     .lnk "Refresh My Network Places" depuis le profil utilisateur.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .OUTPUTS
     [pscustomobject[]] — tableau de resultats avec Step, Success, Severity, Error.
     Etapes possibles: NetworkAdapterEtat, NetworkPing8888, RefreshNetworkPlaces.
 #>
 
-function Get-MinimalNetworkAdapters {
+function Get-WcdNetworkAdapters {
     [CmdletBinding()]
     param()
 
@@ -32,7 +32,7 @@ function Get-MinimalNetworkAdapters {
     return @(Get-NetAdapter -ErrorAction Stop)
 }
 
-function Test-MinimalNetworkAdapterActive {
+function Test-WcdNetworkAdapterActive {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -43,7 +43,7 @@ function Test-MinimalNetworkAdapterActive {
     return ($status -match '^(Up|Connected)$')
 }
 
-function Test-MinimalRelevantNetworkAdapter {
+function Test-WcdRelevantNetworkAdapter {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -60,7 +60,7 @@ function Test-MinimalRelevantNetworkAdapter {
     return (-not ($text -match 'bluetooth|loopback|isatap|teredo|vmware|hyper-v|vEthernet|virtual|vpn|wan miniport|miniport|pangp|anyconnect|juniper|tap'))
 }
 
-function Get-MinimalActiveNetworkAdapters {
+function Get-WcdActiveNetworkAdapters {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -68,12 +68,12 @@ function Get-MinimalActiveNetworkAdapters {
     )
 
     return @($Adapters | Where-Object {
-        (Test-MinimalNetworkAdapterActive -Adapter $_) -and
-        (Test-MinimalRelevantNetworkAdapter -Adapter $_)
+        (Test-WcdNetworkAdapterActive -Adapter $_) -and
+        (Test-WcdRelevantNetworkAdapter -Adapter $_)
     })
 }
 
-function Get-MinimalWiFiAdapter {
+function Get-WcdWiFiAdapter {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -83,7 +83,7 @@ function Get-MinimalWiFiAdapter {
     return @($Adapters | Where-Object { $_.PhysicalMediaType -eq 'Native 802.11' }) | Select-Object -First 1
 }
 
-function Get-MinimalAdapterIPv4 {
+function Get-WcdAdapterIPv4 {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -100,7 +100,7 @@ function Get-MinimalAdapterIPv4 {
     return $null
 }
 
-function Get-MinimalNetworkAdapterKind {
+function Get-WcdNetworkAdapterKind {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -125,7 +125,7 @@ function Get-MinimalNetworkAdapterKind {
     return 'Autre'
 }
 
-function Format-MinimalNetworkAdapterSummary {
+function Format-WcdNetworkAdapterSummary {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -146,7 +146,7 @@ function Format-MinimalNetworkAdapterSummary {
             $label = 'Adaptateur inconnu'
         }
 
-        '{0}: {1}' -f (Get-MinimalNetworkAdapterKind -Adapter $_), $label
+        '{0}: {1}' -f (Get-WcdNetworkAdapterKind -Adapter $_), $label
     })
 
     $summary = $preview -join ', '
@@ -157,7 +157,7 @@ function Format-MinimalNetworkAdapterSummary {
     return $summary
 }
 
-function Test-MinimalNetworkPing {
+function Test-WcdNetworkPing {
     [CmdletBinding()]
     param(
         [string]$ComputerName = '8.8.8.8',
@@ -195,7 +195,7 @@ function Test-MinimalNetworkPing {
     }
 }
 
-function Get-MinimalRefreshNetworkPlacesShortcutPath {
+function Get-WcdRefreshNetworkPlacesShortcutPath {
     [CmdletBinding()]
     param()
 
@@ -227,7 +227,7 @@ function Get-MinimalRefreshNetworkPlacesShortcutPath {
     return $null
 }
 
-function Invoke-MinimalNetworkShortcut {
+function Invoke-WcdNetworkShortcut {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -237,24 +237,24 @@ function Invoke-MinimalNetworkShortcut {
     Start-Process -FilePath $Path -ErrorAction Stop
 }
 
-function Set-MinimalNetworkDiagnostics {
+function Set-WcdNetworkDiagnostics {
     [CmdletBinding()]
     param(
         [string]$LogPath
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $results = @()
     $activeAdapters = @()
     $adapterInventoryUnavailable = $false
 
     try {
-        $adapters = @(Get-MinimalNetworkAdapters)
-        $activeAdapters = @(Get-MinimalActiveNetworkAdapters -Adapters $adapters)
+        $adapters = @(Get-WcdNetworkAdapters)
+        $activeAdapters = @(Get-WcdActiveNetworkAdapters -Adapters $adapters)
 
         if ($activeAdapters.Count -gt 0) {
-            $summary = Format-MinimalNetworkAdapterSummary -Adapters $activeAdapters
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: adaptateurs actifs detectes: {0}' -f $summary)
+            $summary = Format-WcdNetworkAdapterSummary -Adapters $activeAdapters
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: adaptateurs actifs detectes: {0}' -f $summary)
             $results += [pscustomobject]@{
                 Step     = 'NetworkAdapterEtat'
                 Success  = $true
@@ -264,10 +264,10 @@ function Set-MinimalNetworkDiagnostics {
         } else {
             $message = 'Aucun adaptateur reseau actif pertinent detecte.'
             if ($adapters.Count -gt 0) {
-                $message = '{0} Adaptateurs vus: {1}' -f $message, (Format-MinimalNetworkAdapterSummary -Adapters $adapters)
+                $message = '{0} Adaptateurs vus: {1}' -f $message, (Format-WcdNetworkAdapterSummary -Adapters $adapters)
             }
 
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkAdapterEtat'
                 Success  = $true
@@ -278,7 +278,7 @@ function Set-MinimalNetworkDiagnostics {
     } catch {
         $adapterInventoryUnavailable = $true
         $message = 'Impossible d inventorier les adaptateurs reseau: {0}' -f $_.Exception.Message
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
         $results += [pscustomobject]@{
             Step     = 'NetworkAdapterEtat'
             Success  = $false
@@ -289,7 +289,7 @@ function Set-MinimalNetworkDiagnostics {
 
     if ($adapterInventoryUnavailable) {
         $message = 'Ping 8.8.8.8 ignore: inventaire des adaptateurs reseau indisponible.'
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message $message
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
         $results += [pscustomobject]@{
             Step     = 'NetworkPing8888'
             Success  = $true
@@ -298,7 +298,7 @@ function Set-MinimalNetworkDiagnostics {
         }
     } elseif ($activeAdapters.Count -eq 0) {
         $message = 'Ping 8.8.8.8 ignore: aucun adaptateur reseau actif pertinent detecte.'
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message $message
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
         $results += [pscustomobject]@{
             Step     = 'NetworkPing8888'
             Success  = $true
@@ -307,21 +307,21 @@ function Set-MinimalNetworkDiagnostics {
         }
     } else {
         # --- Ping 8.8.8.8 via Wi-Fi (source forcee avec -S) ---
-        $wifiAdapter = Get-MinimalWiFiAdapter -Adapters $adapters
+        $wifiAdapter = Get-WcdWiFiAdapter -Adapters $adapters
 
         if ($null -eq $wifiAdapter) {
             $message = 'Adaptateur Wi-Fi (802.11) non detecte sur ce poste. Ping Wi-Fi ignore.'
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkPing8888'
                 Success  = $true
                 Severity = 'WARNING'
                 Error    = $message
             }
-        } elseif (-not (Test-MinimalNetworkAdapterActive -Adapter $wifiAdapter)) {
+        } elseif (-not (Test-WcdNetworkAdapterActive -Adapter $wifiAdapter)) {
             $wifiName = if (-not [string]::IsNullOrWhiteSpace($wifiAdapter.InterfaceDescription)) { $wifiAdapter.InterfaceDescription } else { $wifiAdapter.Name }
             $message = 'Adaptateur Wi-Fi detecte ({0}) mais non actif (Status: {1}). Ping Wi-Fi ignore.' -f $wifiName, $wifiAdapter.Status
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'NetworkPing8888'
                 Success  = $true
@@ -329,12 +329,12 @@ function Set-MinimalNetworkDiagnostics {
                 Error    = $message
             }
         } else {
-            $wifiIPv4 = Get-MinimalAdapterIPv4 -Adapter $wifiAdapter
+            $wifiIPv4 = Get-WcdAdapterIPv4 -Adapter $wifiAdapter
             $wifiName = if (-not [string]::IsNullOrWhiteSpace($wifiAdapter.InterfaceDescription)) { $wifiAdapter.InterfaceDescription } else { $wifiAdapter.Name }
 
             if ([string]::IsNullOrWhiteSpace($wifiIPv4)) {
                 $message = 'Adaptateur Wi-Fi actif ({0}) mais aucune adresse IPv4 attribuee. Ping Wi-Fi ignore.' -f $wifiName
-                Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+                Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
                 $results += [pscustomobject]@{
                     Step     = 'NetworkPing8888'
                     Success  = $true
@@ -343,14 +343,14 @@ function Set-MinimalNetworkDiagnostics {
                 }
             } else {
                 try {
-                    $pingResult = Test-MinimalNetworkPing -ComputerName '8.8.8.8' -SourceAddress $wifiIPv4
+                    $pingResult = Test-WcdNetworkPing -ComputerName '8.8.8.8' -SourceAddress $wifiIPv4
                     if ($pingResult.Reachable) {
                         $detail = ''
                         if (-not [string]::IsNullOrWhiteSpace($pingResult.Detail)) {
                             $detail = ' ({0})' -f $pingResult.Detail
                         }
 
-                        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: ping 8.8.8.8 via Wi-Fi ({0}, source {1}) reussi{2}.' -f $wifiName, $wifiIPv4, $detail)
+                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: ping 8.8.8.8 via Wi-Fi ({0}, source {1}) reussi{2}.' -f $wifiName, $wifiIPv4, $detail)
                         $results += [pscustomobject]@{
                             Step     = 'NetworkPing8888'
                             Success  = $true
@@ -359,7 +359,7 @@ function Set-MinimalNetworkDiagnostics {
                         }
                     } else {
                         $message = 'Le ping vers 8.8.8.8 via Wi-Fi ({0}, source {1}) a echoue.' -f $wifiName, $wifiIPv4
-                        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+                        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
                         $results += [pscustomobject]@{
                             Step     = 'NetworkPing8888'
                             Success  = $true
@@ -369,7 +369,7 @@ function Set-MinimalNetworkDiagnostics {
                     }
                 } catch {
                     $message = 'Le ping vers 8.8.8.8 via Wi-Fi n a pas pu etre execute: {0}' -f $_.Exception.Message
-                    Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
+                    Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
                     $results += [pscustomobject]@{
                         Step     = 'NetworkPing8888'
                         Success  = $true
@@ -382,10 +382,10 @@ function Set-MinimalNetworkDiagnostics {
     }
 
     try {
-        $shortcutPath = Get-MinimalRefreshNetworkPlacesShortcutPath
+        $shortcutPath = Get-WcdRefreshNetworkPlacesShortcutPath
         if ([string]::IsNullOrWhiteSpace($shortcutPath)) {
             $message = 'Refresh My Network Places introuvable dans les raccourcis reseau de l utilisateur.'
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'RefreshNetworkPlaces'
                 Success  = $true
@@ -393,8 +393,8 @@ function Set-MinimalNetworkDiagnostics {
                 Error    = $message
             }
         } else {
-            Invoke-MinimalNetworkShortcut -Path $shortcutPath
-            Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: Refresh My Network Places active via {0}.' -f $shortcutPath)
+            Invoke-WcdNetworkShortcut -Path $shortcutPath
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Reseau: Refresh My Network Places active via {0}.' -f $shortcutPath)
             $results += [pscustomobject]@{
                 Step     = 'RefreshNetworkPlaces'
                 Success  = $true
@@ -404,7 +404,7 @@ function Set-MinimalNetworkDiagnostics {
         }
     } catch {
         $message = 'Refresh My Network Places n a pas pu etre active: {0}' -f $_.Exception.Message
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
         $results += [pscustomobject]@{
             Step     = 'RefreshNetworkPlaces'
             Success  = $true

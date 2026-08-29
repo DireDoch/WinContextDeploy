@@ -5,20 +5,20 @@
 
 .DESCRIPTION
     Fournit les primitives communes:
-    - Journalisation     : Resolve-MinimalLogPath, Initialize-MinimalLog, Write-MinimalLog
-    - Progression ASCII  : New-MinimalProgressState, Update-MinimalProgressState,
-                           Write-MinimalProgressSnapshot, Invoke-MinimalProgressCallback
-    - Registre Windows   : Set-MinimalRegistryValue
-    - Utilitaires systeme: Invoke-MinimalPowerCfg, Import-MinimalConfig,
-                           Resolve-MinimalDynamicPath
-    - Diagnostic final   : Get-MinimalHistoryBlock, Export-MinimalHistoryLog
+    - Journalisation     : Resolve-WcdLogPath, Initialize-WcdLog, Write-WcdLog
+    - Progression ASCII  : New-WcdProgressState, Update-WcdProgressState,
+                           Write-WcdProgressSnapshot, Invoke-WcdProgressCallback
+    - Registre Windows   : Set-WcdRegistryValue
+    - Utilitaires systeme: Invoke-WcdPowerCfg, Import-WcdConfig,
+                           Resolve-WcdDynamicPath
+    - Diagnostic final   : Get-WcdHistoryBlock, Export-WcdHistoryLog
 
 .NOTES
-    Chargement: . (Join-Path $PSScriptRoot 'MinimalHelpers.ps1')
+    Chargement: . (Join-Path $PSScriptRoot 'WcdHelpers.ps1')
     Aucun parametre d'entree — ce fichier expose uniquement des fonctions.
 #>
 
-function Resolve-MinimalLogPath {
+function Resolve-WcdLogPath {
     [CmdletBinding()]
     param(
         [string]$CandidatePath
@@ -43,7 +43,7 @@ function Resolve-MinimalLogPath {
     return (Join-Path $basePath 'log.txt')
 }
 
-function Initialize-MinimalLog {
+function Initialize-WcdLog {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -59,7 +59,7 @@ function Initialize-MinimalLog {
     [System.IO.File]::WriteAllText($Path, [string]::Empty, $utf8Encoding)
 }
 
-function Write-MinimalLog {
+function Write-WcdLog {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -85,7 +85,7 @@ function Write-MinimalLog {
     Add-Content -Path $Path -Value $line -Encoding UTF8
 }
 
-function Get-MinimalResultSeverity {
+function Get-WcdResultSeverity {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -104,7 +104,7 @@ function Get-MinimalResultSeverity {
     return 'INFO'
 }
 
-function Get-MinimalTechnicalStepLabels {
+function Get-WcdTechnicalStepLabels {
     [CmdletBinding()]
     param()
 
@@ -138,7 +138,7 @@ function Get-MinimalTechnicalStepLabels {
     }
 }
 
-function Get-MinimalModuleProgressPlan {
+function Get-WcdModuleProgressPlan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -193,7 +193,7 @@ function Get-MinimalModuleProgressPlan {
     }
 }
 
-function Get-MinimalDiagnosticStyle {
+function Get-WcdDiagnosticStyle {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -224,7 +224,7 @@ function Get-MinimalDiagnosticStyle {
     }
 }
 
-function Format-MinimalElapsedMilliseconds {
+function Format-WcdElapsedMilliseconds {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -235,7 +235,7 @@ function Format-MinimalElapsedMilliseconds {
     return ('{0:N0}ms' -f $elapsed.TotalMilliseconds)
 }
 
-function Format-MinimalAsciiProgressBar {
+function Format-WcdAsciiProgressBar {
     [CmdletBinding()]
     param(
         [int]$CompletedSteps,
@@ -253,7 +253,7 @@ function Format-MinimalAsciiProgressBar {
     return ('[{0}{1}] {2}%' -f ('#' * $filled), ('-' * $empty), $percent)
 }
 
-function Test-MinimalRawUiAvailability {
+function Test-WcdRawUiAvailability {
     [CmdletBinding()]
     param()
 
@@ -265,7 +265,7 @@ function Test-MinimalRawUiAvailability {
     }
 }
 
-function New-MinimalProgressState {
+function New-WcdProgressState {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -290,13 +290,13 @@ function New-MinimalProgressState {
         CompletedSteps = 0
         StartedAt      = Get-Date
         CurrentStepKey = ''
-        RenderMode     = if (Test-MinimalRawUiAvailability) { 'InPlace' } else { 'Plain' }
+        RenderMode     = if (Test-WcdRawUiAvailability) { 'InPlace' } else { 'Plain' }
     }
 
     return $state
 }
 
-function Write-MinimalProgressSnapshot {
+function Write-WcdProgressSnapshot {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -312,8 +312,8 @@ function Write-MinimalProgressSnapshot {
         [string]$Kind = 'running'
     )
 
-    $bar = Format-MinimalAsciiProgressBar -CompletedSteps $State.CompletedSteps -TotalSteps $State.TotalSteps
-    $elapsed = Format-MinimalElapsedMilliseconds -StartedAt $State.StartedAt
+    $bar = Format-WcdAsciiProgressBar -CompletedSteps $State.CompletedSteps -TotalSteps $State.TotalSteps
+    $elapsed = Format-WcdElapsedMilliseconds -StartedAt $State.StartedAt
     $line = '{0} : {1}  {2}' -f $State.ModuleName, $bar, $elapsed
 
     if ($State.RenderMode -eq 'InPlace') {
@@ -324,7 +324,7 @@ function Write-MinimalProgressSnapshot {
     Write-Host $line -ForegroundColor Cyan
 }
 
-function Update-MinimalProgressState {
+function Update-WcdProgressState {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -357,14 +357,14 @@ function Update-MinimalProgressState {
             default { 'Etape terminee' }
         }
 
-        Write-MinimalProgressSnapshot -State $State -CurrentStepLabel $currentStepLabel -PhaseText $phaseText -Kind $Kind
+        Write-WcdProgressSnapshot -State $State -CurrentStepLabel $currentStepLabel -PhaseText $phaseText -Kind $Kind
         return
     }
 
-    Write-MinimalProgressSnapshot -State $State -CurrentStepLabel $currentStepLabel -PhaseText 'Execution en cours' -Kind 'running'
+    Write-WcdProgressSnapshot -State $State -CurrentStepLabel $currentStepLabel -PhaseText 'Execution en cours' -Kind 'running'
 }
 
-function Invoke-MinimalProgressCallback {
+function Invoke-WcdProgressCallback {
     [CmdletBinding()]
     param(
         [scriptblock]$ProgressCallback,
@@ -395,7 +395,7 @@ function Invoke-MinimalProgressCallback {
     })
 }
 
-function Get-MinimalHistoryBlock {
+function Get-WcdHistoryBlock {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -475,7 +475,7 @@ function Get-MinimalHistoryBlock {
     return ($lines -join [Environment]::NewLine)
 }
 
-function Export-MinimalHistoryLog {
+function Export-WcdHistoryLog {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -493,7 +493,7 @@ function Export-MinimalHistoryLog {
     }
 
     $utf8Encoding = New-Object System.Text.UTF8Encoding($false)
-    $block = Get-MinimalHistoryBlock -LocalLogPath $LocalLogPath -DiagnosticLines $DiagnosticLines
+    $block = Get-WcdHistoryBlock -LocalLogPath $LocalLogPath -DiagnosticLines $DiagnosticLines
     $prefix = if (Test-Path -LiteralPath $HistoryLogPath) { [Environment]::NewLine } else { [string]::Empty }
     $contentToAppend = '{0}{1}{2}' -f $prefix, $block, [Environment]::NewLine
 
@@ -501,7 +501,7 @@ function Export-MinimalHistoryLog {
     return $HistoryLogPath
 }
 
-function Invoke-MinimalPowerCfg {
+function Invoke-WcdPowerCfg {
     [CmdletBinding()]
     param(
         [Parameter(ValueFromRemainingArguments)]
@@ -514,7 +514,7 @@ function Invoke-MinimalPowerCfg {
     }
 }
 
-function Import-MinimalConfig {
+function Import-WcdConfig {
     [CmdletBinding()]
     param(
         [string]$ConfigPath
@@ -538,16 +538,16 @@ function Import-MinimalConfig {
 
     foreach ($base in $searchBases) {
         if ([string]::IsNullOrWhiteSpace($base)) { continue }
-        $candidate = Join-Path $base 'Config-Paths.psd1'
+        $candidate = Join-Path $base 'WinContextDeploy.psd1'
         if (Test-Path -LiteralPath $candidate) {
             return Import-PowerShellDataFile -Path $candidate
         }
     }
 
-    throw 'Config-Paths.psd1 introuvable. Fournir le chemin via -ConfigPath.'
+    throw 'WinContextDeploy.psd1 introuvable. Fournir le chemin via -ConfigPath.'
 }
 
-function Resolve-MinimalDynamicPath {
+function Resolve-WcdDynamicPath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -580,7 +580,7 @@ function Resolve-MinimalDynamicPath {
     return $null
 }
 
-function Set-MinimalRegistryValue {
+function Set-WcdRegistryValue {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

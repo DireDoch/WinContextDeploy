@@ -1,16 +1,10 @@
 Describe 'Config-Language' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        $modulePath  = Join-Path $PSScriptRoot 'Config-Language.ps1'
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
+        $modulePath  = Join-Path $srcDir 'Config-Language.ps1'
 
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
-        if (-not (Test-Path -LiteralPath $modulePath)) {
-            $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/Config-Language.ps1'
-        }
-
-        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'MinimalHelpers.ps1 introuvable.' }
+        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'WcdHelpers.ps1 introuvable.' }
         if (-not (Test-Path -LiteralPath $modulePath))  { throw 'Config-Language.ps1 introuvable.' }
 
         . $helpersPath
@@ -24,20 +18,20 @@ Describe 'Config-Language' {
         $inputTips = New-Object 'System.Collections.Generic.List[string]'
         [void]$inputTips.Add('0C0C:00001009')
 
-        Mock -CommandName 'New-MinimalLanguageList' {
+        Mock -CommandName 'New-WcdLanguageList' {
             @([pscustomobject]@{ InputMethodTips = $inputTips })
         }
-        Mock -CommandName 'Set-MinimalLanguageList' {}
-        Mock -CommandName 'Set-MinimalLocaleOverrides' {}
-        Mock -CommandName 'Set-MinimalKeyboardOverride' {}
+        Mock -CommandName 'Set-WcdLanguageList' {}
+        Mock -CommandName 'Set-WcdLocaleOverrides' {}
+        Mock -CommandName 'Set-WcdKeyboardOverride' {}
 
-        $results = @(Set-MinimalLanguageConfiguration -Culture 'fr-CA' -LogPath $logPath)
+        $results = @(Set-WcdLanguageConfiguration -Culture 'fr-CA' -LogPath $logPath)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
             ($results | Where-Object Step -eq 'LangueWindows').Success | Should -BeTrue
             ($results | Where-Object Step -eq 'ClavierWindows').Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Set-MinimalLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'fr-CA' -and $GeoId -eq 39 }
+            Assert-MockCalled -CommandName 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'fr-CA' -and $GeoId -eq 39 }
             Get-Content -Path $logPath -Raw | Should -Match 'Langue: fr-CA appliquee'
             Get-Content -Path $logPath -Raw | Should -Match 'deconnexion/reconnexion'
             Get-Content -Path $logPath -Raw | Should -Match 'Clavier: Canadien francais \(QWERTY\) applique'
@@ -45,7 +39,7 @@ Describe 'Config-Language' {
             $results.Count | Should Be 2
             ($results | Where-Object Step -eq 'LangueWindows').Success | Should Be $true
             ($results | Where-Object Step -eq 'ClavierWindows').Success | Should Be $true
-            Assert-MockCalled 'Set-MinimalLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'fr-CA' -and $GeoId -eq 39 }
+            Assert-MockCalled 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'fr-CA' -and $GeoId -eq 39 }
             Get-Content -Path $logPath -Raw | Should Match 'Langue: fr-CA appliquee'
             Get-Content -Path $logPath -Raw | Should Match 'deconnexion/reconnexion'
             Get-Content -Path $logPath -Raw | Should Match 'Clavier: Canadien francais \(QWERTY\) applique'
@@ -57,27 +51,27 @@ Describe 'Config-Language' {
         $inputTips = New-Object 'System.Collections.Generic.List[string]'
         [void]$inputTips.Add('0409:00000409')
 
-        Mock -CommandName 'New-MinimalLanguageList' {
+        Mock -CommandName 'New-WcdLanguageList' {
             @([pscustomobject]@{ InputMethodTips = $inputTips })
         }
-        Mock -CommandName 'Set-MinimalLanguageList' {}
-        Mock -CommandName 'Set-MinimalLocaleOverrides' {}
-        Mock -CommandName 'Set-MinimalKeyboardOverride' {}
+        Mock -CommandName 'Set-WcdLanguageList' {}
+        Mock -CommandName 'Set-WcdLocaleOverrides' {}
+        Mock -CommandName 'Set-WcdKeyboardOverride' {}
 
-        $results = @(Set-MinimalLanguageConfiguration -Culture 'en-US' -LogPath $logPath)
+        $results = @(Set-WcdLanguageConfiguration -Culture 'en-US' -LogPath $logPath)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
             ($results | Where-Object Step -eq 'LangueWindows').Success | Should -BeTrue
             ($results | Where-Object Step -eq 'ClavierWindows').Success | Should -BeTrue
-            Assert-MockCalled -CommandName 'Set-MinimalLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'en-US' -and $GeoId -eq 244 }
+            Assert-MockCalled -CommandName 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'en-US' -and $GeoId -eq 244 }
             Get-Content -Path $logPath -Raw | Should -Match 'Langue: en-US appliquee'
             Get-Content -Path $logPath -Raw | Should -Match 'Clavier: Anglais \(Etats-Unis\) applique'
         } else {
             $results.Count | Should Be 2
             ($results | Where-Object Step -eq 'LangueWindows').Success | Should Be $true
             ($results | Where-Object Step -eq 'ClavierWindows').Success | Should Be $true
-            Assert-MockCalled 'Set-MinimalLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'en-US' -and $GeoId -eq 244 }
+            Assert-MockCalled 'Set-WcdLocaleOverrides' -Times 1 -Exactly -ParameterFilter { $Culture -eq 'en-US' -and $GeoId -eq 244 }
             Get-Content -Path $logPath -Raw | Should Match 'Langue: en-US appliquee'
             Get-Content -Path $logPath -Raw | Should Match 'Clavier: Anglais \(Etats-Unis\) applique'
         }
@@ -86,10 +80,10 @@ Describe 'Config-Language' {
     It 'continue avec le clavier meme si la langue echoue' {
         $logPath = Join-Path $TestDrive 'log_language_partial.txt'
 
-        Mock -CommandName 'New-MinimalLanguageList' { throw 'Commande langue indisponible' }
-        Mock -CommandName 'Set-MinimalKeyboardOverride' {}
+        Mock -CommandName 'New-WcdLanguageList' { throw 'Commande langue indisponible' }
+        Mock -CommandName 'Set-WcdKeyboardOverride' {}
 
-        $results = @(Set-MinimalLanguageConfiguration -Culture 'fr-CA' -LogPath $logPath)
+        $results = @(Set-WcdLanguageConfiguration -Culture 'fr-CA' -LogPath $logPath)
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2
@@ -103,7 +97,7 @@ Describe 'Config-Language' {
     }
 
     It 'retourne un profil fr-CA avec fallback et region' {
-        $profile = Get-MinimalLanguageProfile -Culture 'fr-CA'
+        $profile = Get-WcdLanguageProfile -Culture 'fr-CA'
 
         if ($script:PesterMajorVersion -ge 5) {
             $profile.Culture | Should -Be 'fr-CA'
@@ -129,7 +123,7 @@ Describe 'Config-Language' {
             return ,$list
         }
 
-        $languageList = New-MinimalLanguageList -Culture 'fr-CA' -FallbackCultures @('fr-FR')
+        $languageList = New-WcdLanguageList -Culture 'fr-CA' -FallbackCultures @('fr-FR')
 
         if ($script:PesterMajorVersion -ge 5) {
             @($languageList).Count | Should -Be 2

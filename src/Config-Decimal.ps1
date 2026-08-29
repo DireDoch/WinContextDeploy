@@ -7,11 +7,11 @@
     Modifie les cles de registre HKCU:\Control Panel\International pour
     appliquer le point comme separateur decimal et la virgule comme separateur
     de milliers, aussi bien pour les nombres que pour les montants.
-    Requiert MinimalHelpers.ps1 charge au prealable via dot-source.
+    Requiert WcdHelpers.ps1 charge au prealable via dot-source.
 
 .PARAMETER LogPath
     Chemin complet vers le fichier journal (.txt). Si omis, resolu automatiquement
-    par Resolve-MinimalLogPath.
+    par Resolve-WcdLogPath.
 
 .PARAMETER ProgressCallback
     Scriptblock appele a chaque debut/fin d'etape pour afficher la progression.
@@ -20,7 +20,7 @@
     [pscustomobject] — resultat unique avec Step, Success, LogPath, Error.
 #>
 
-function Set-MinimalDecimalThreadCulture {
+function Set-WcdDecimalThreadCulture {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -45,27 +45,27 @@ function Set-MinimalDecimalThreadCulture {
     }
 }
 
-function Set-MinimalDecimalConfiguration {
+function Set-WcdDecimalConfiguration {
     [CmdletBinding()]
     param(
         [string]$LogPath,
         [scriptblock]$ProgressCallback
     )
 
-    $resolvedLogPath = Resolve-MinimalLogPath -CandidatePath $LogPath
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
     $intlPath = 'HKCU:\Control Panel\International'
     $moduleName = 'Config-Decimal'
 
     try {
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Start'
-        Set-MinimalRegistryValue -Path $intlPath -Name 'sDecimal' -Value '.'
-        Set-MinimalRegistryValue -Path $intlPath -Name 'sThousandSep' -Value ','
-        Set-MinimalRegistryValue -Path $intlPath -Name 'sMonDecimalSep' -Value '.'
-        Set-MinimalRegistryValue -Path $intlPath -Name 'sMonetaryDecimal' -Value '.'
-        Set-MinimalRegistryValue -Path $intlPath -Name 'sMonThousandSep' -Value ','
-        Set-MinimalDecimalThreadCulture -DecimalSeparator '.' -ThousandsSeparator ','
-        Write-MinimalLog -Path $resolvedLogPath -Level 'INFO' -Message 'Decimales: symboles numeriques et monetaires forces a un point.'
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Finish' -Kind 'success'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Start'
+        Set-WcdRegistryValue -Path $intlPath -Name 'sDecimal' -Value '.'
+        Set-WcdRegistryValue -Path $intlPath -Name 'sThousandSep' -Value ','
+        Set-WcdRegistryValue -Path $intlPath -Name 'sMonDecimalSep' -Value '.'
+        Set-WcdRegistryValue -Path $intlPath -Name 'sMonetaryDecimal' -Value '.'
+        Set-WcdRegistryValue -Path $intlPath -Name 'sMonThousandSep' -Value ','
+        Set-WcdDecimalThreadCulture -DecimalSeparator '.' -ThousandsSeparator ','
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Decimales: symboles numeriques et monetaires forces a un point.'
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Finish' -Kind 'success'
 
         return [pscustomobject]@{
             Step    = 'DecimalEtMonetaire'
@@ -78,8 +78,8 @@ function Set-MinimalDecimalConfiguration {
         if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
             $note = 'Cle verrouillee par GPO ou acces refuse.'
         }
-        Write-MinimalLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Decimales: {0}" -f $note)
-        Invoke-MinimalProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Finish' -Kind 'error'
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Decimales: {0}" -f $note)
+        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DecimalEtMonetaire' -Event 'Finish' -Kind 'error'
 
         return [pscustomobject]@{
             Step    = 'DecimalEtMonetaire'

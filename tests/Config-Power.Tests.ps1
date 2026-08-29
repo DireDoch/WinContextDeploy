@@ -1,16 +1,10 @@
 Describe 'Config-Power' {
     BeforeAll {
-        $helpersPath = Join-Path $PSScriptRoot 'MinimalHelpers.ps1'
-        $modulePath  = Join-Path $PSScriptRoot 'Config-Power.ps1'
+        $srcDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'src'
+        $helpersPath = Join-Path $srcDir 'WcdHelpers.ps1'
+        $modulePath  = Join-Path $srcDir 'Config-Power.ps1'
 
-        if (-not (Test-Path -LiteralPath $helpersPath)) {
-            $helpersPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/MinimalHelpers.ps1'
-        }
-        if (-not (Test-Path -LiteralPath $modulePath)) {
-            $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests/Config-Power.ps1'
-        }
-
-        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'MinimalHelpers.ps1 introuvable.' }
+        if (-not (Test-Path -LiteralPath $helpersPath)) { throw 'WcdHelpers.ps1 introuvable.' }
         if (-not (Test-Path -LiteralPath $modulePath))  { throw 'Config-Power.ps1 introuvable.' }
 
         . $helpersPath
@@ -22,9 +16,9 @@ Describe 'Config-Power' {
     It 'configure alimentation complete pour portable avec succes' {
         $logPath = Join-Path $TestDrive 'log_power_full.txt'
 
-        Mock -CommandName 'Invoke-MinimalPowerCfg' {}
+        Mock -CommandName 'Invoke-WcdPowerCfg' {}
 
-        $results = Set-MinimalPowerConfiguration -DeviceType 'Portable' -LogPath $logPath
+        $results = Set-WcdPowerConfiguration -DeviceType 'Portable' -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 5
@@ -54,9 +48,9 @@ Describe 'Config-Power' {
     It 'configure alimentation pour bureau sans etape capot' {
         $logPath = Join-Path $TestDrive 'log_power_bureau.txt'
 
-        Mock -CommandName 'Invoke-MinimalPowerCfg' {}
+        Mock -CommandName 'Invoke-WcdPowerCfg' {}
 
-        $results = Set-MinimalPowerConfiguration -DeviceType 'Bureau' -LogPath $logPath
+        $results = Set-WcdPowerConfiguration -DeviceType 'Bureau' -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
             $results.Count | Should -Be 2

@@ -1,5 +1,5 @@
 # =============================================================================
-# Config-Paths.psd1
+# WinContextDeploy.psd1
 # =============================================================================
 # Fichier de configuration statique pour WinContextDeploy.
 # Contient tous les chemins, URLs et parametres externes utilises par les
