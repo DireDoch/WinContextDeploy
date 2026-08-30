@@ -43,4 +43,4 @@ otherwise.
 ## Supported versions
 
 This project has no release branches. Fixes land on `main`; pull the latest
-commit.
+commit. We can have `develop` branch down the line if the project becomes more popular and stuff.
