@@ -67,6 +67,66 @@ technician.
 > keyboard/language). Read `WinContextDeploy.psd1` and adjust the paths to your
 > environment before first use.
 
+### Answering the prompts
+
+Four or five questions, answered with the arrow keys — Left and Right move,
+Enter confirms. The bracketed option is the current one, highlighted in the
+console.
+
+```text
+Windows system language
+  fr-CA = French Canadian Windows interface  |  en-US = American English
+Use Left/Right to change, then Enter to confirm.
+[ FR: fr-CA ]   EN: en-US
+
+Machine form factor
+  Laptop = has a battery and a lid  |  Desktop = neither
+  Selects the power profile: battery and lid-close settings.
+[ L: Laptop ]   D: Desktop
+
+Machine environment
+  Workstation = full local machine  -> checks the locally installed applications
+  Citrix / VDI = thin endpoint      -> its applications live in the remote session
+[ W: Workstation ]   V: Citrix / VDI
+
+Open Workstation configuration applications?
+  Opens the Application Targets declared in WinContextDeploy.psd1.
+  Answer Yes unless applications were already opened manually.
+[ Y: Yes ]   N: No
+```
+
+### The checklist at the end
+
+Every step, in the order it ran, with a remediation line naming the fix — and
+the manifest key to edit — when something needs one.
+
+```text
+===============================================
+         FINAL DIAGNOSTIC - BY STEP
+===============================================
+  [x]  Taskbar aligned left     OK
+  [x]  Display language         OK
+  [x]  Power options            OK
+  [x]  Device Manager           OK
+  [x]  Network adapters         OK
+  [x]  Outlook                  OK
+  [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).
+                                           -> Confirm VPN client is installed and started,
+                                              or mark the entry Optional.
+  [!]  ERP client               ERROR      ERP client not found at C:\ProgramData\...
+                                           -> Update Applications['ERP client'].Target in
+                                              WinContextDeploy.psd1, or remove the entry.
+  [-]  Citrix Workspace         N/A        Not applicable to the chosen Environment.
+  [-]  Mail signature           MANUAL     Must be done manually.
+  [-]  Wi-Fi                    MANUAL     Must be done manually.
+
+Summary: 6 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.
+```
+
+`OK`, `WARNING` and `ERROR` are green, yellow and red in the console. `MANUAL`
+is yours to do; `N/A` does not apply to this machine, so its absence is correct
+rather than a problem.
+
 ## Requirements
 
 - Windows 10/11, PowerShell 5.1 or later
