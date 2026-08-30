@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Read the manual first
+    url: https://github.com/DireDoch/WinContextDeploy/blob/main/docs/manual.pdf
+    about: 24 pages covering what the tool does, the architecture, and how to add a module.
+  - name: How to contribute
+    url: https://github.com/DireDoch/WinContextDeploy/blob/main/CONTRIBUTING.md
+    about: What is useful to send, and what a change should come with.

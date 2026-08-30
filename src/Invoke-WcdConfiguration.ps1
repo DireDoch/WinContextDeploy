@@ -1659,7 +1659,7 @@ foreach ($mod in $modules) {
     $progressCallback = {
         param($eventData)
 
-        Update-WcdProgressState -State $progressState -StepKey $eventData.Step -Event $eventData.Event -Kind $eventData.Kind
+        Update-WcdProgressState -State $progressState -StepKey $eventData.Step -Event $eventData.Event
     }
 
     try {

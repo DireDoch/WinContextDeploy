@@ -279,12 +279,17 @@ Invoke-Pester .\tests\*.Tests.ps1 -Output Detailed
 
 Or double-click `Lancer-Tests-Pester.cmd`.
 
+Every pull request runs three jobs on CI: the Pester suite on `windows-latest`,
+PSScriptAnalyzer against `PSScriptAnalyzerSettings.psd1`, and a compile of
+`docs/manual.typ` so the manual cannot rot while nobody rebuilds it.
+
 ## Structure
 
 ```
 banner.txt                        <- startup logo (editable)
 WinContextDeploy.psd1             <- paths, printers, URLs (edit this)
 WinContextDeploy.cmd              <- entry point (-Usb, -FR, -EN)
+PSScriptAnalyzerSettings.psd1     <- lint rules, each exclusion justified
 docs/
   manual.typ / manual.pdf         <- the manual
 src/
@@ -307,33 +312,24 @@ tests/
 
 ## Contributing
 
-Ideas are genuinely welcome, and they do not have to come with code.
+**Ideas are genuinely welcome, and they do not have to come with code.**
 
-This started as one technician's script for one fleet, which means the parts that
-felt obvious to me may well be wrong for you. If your machines need something
-mine never did, that is worth an issue — even if it is only a sentence
-describing what you do by hand today.
+This started as one technician's script for one fleet, so the parts that felt
+obvious to me may well be wrong for you. If your machines need something mine
+never did, that is worth an issue — even if it is only a sentence describing what
+you do by hand today.
 
-Things that are always useful:
-
-- **A configuration step you still do manually.** If you repeat it on every
-  machine, it probably belongs here. Say what it is; the how can be worked out.
-- **An `Action` the manifest cannot express.** The five that exist covered my
-  fleet. They will not cover everyone's.
-- **A place where the diagnostic told you nothing useful.** A failure that does
-  not name its fix is a bug in this project, not a fact of life.
-- **Anything the manual explains badly.** If a chapter did not answer the
-  question you actually had, that is worth reporting.
-- **Bug reports.** Include the relevant lines from `log.txt`, or the JSON report
-  from `-ReportPath` if you have one.
-
-If you would rather send code: fork it, work on a branch, keep
-`Invoke-Pester .\tests\*.Tests.ps1` green, and open a pull request. New modules
-want a test file and a comment-based help block — chapter 7 of the manual walks
-through both, with a template to copy.
+Always useful: a step you still do manually, an `Action` the manifest cannot
+express, a place where the diagnostic told you nothing useful, a chapter of the
+manual that missed your question, or a plain bug report.
 
 No contribution is too small, and "I tried this and it did not work" is a
 perfectly good contribution.
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for how to set up, what a change
+should come with, and the house style — plus
+[SECURITY.md](SECURITY.md) if you have found something that should not be
+reported in public.
 
 ## License
 

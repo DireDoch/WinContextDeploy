@@ -1,0 +1,58 @@
+name: Bug report
+description: Something went wrong on a run
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: The relevant lines
+      description: |
+        From `log.txt`, the final diagnostic, or the JSON report if you ran with
+        `-ReportPath`. Paste the lines around the problem — this is rendered as
+        code, no backticks needed.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: how-launched
+    attributes:
+      label: How did you launch it?
+      placeholder: WinContextDeploy.cmd -Usb, or the parameters you passed
+    validations:
+      required: false
+
+  - type: dropdown
+    id: elevated
+    attributes:
+      label: Was the run elevated?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: Windows and PowerShell version
+      placeholder: Windows 11 23H2, PowerShell 5.1
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: manifest
+    attributes:
+      label: Manifest
+      options:
+        - label: I adjusted `WinContextDeploy.psd1` for my environment before running.
+          required: false

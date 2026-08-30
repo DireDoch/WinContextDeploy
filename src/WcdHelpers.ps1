@@ -700,36 +700,19 @@ function Write-WcdProgressSnapshot {
         writes one line per update otherwise.
 
     .PARAMETER State
-        Progress state from New-WcdProgressState.
-
-    .PARAMETER CurrentStepLabel
-        Label of the Step being reported.
-
-    .PARAMETER PhaseText
-        Short phase description for the current Step.
-
-    .PARAMETER Kind
-        'running', 'success', 'warning' or 'error'. Defaults to 'running'.
+        Progress state from New-WcdProgressState. Everything the line shows -
+        the module name, the bar and the elapsed time - comes from it.
 
     .OUTPUTS
         None. Writes to the host.
 
     .EXAMPLE
-        Write-WcdProgressSnapshot -State $state -CurrentStepLabel 'Active power scheme' -PhaseText 'Running'
+        Write-WcdProgressSnapshot -State $state
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [hashtable]$State,
-
-        [Parameter(Mandatory)]
-        [string]$CurrentStepLabel,
-
-        [Parameter(Mandatory)]
-        [string]$PhaseText,
-
-        [ValidateSet('running', 'success', 'warning', 'error')]
-        [string]$Kind = 'running'
+        [hashtable]$State
     )
 
     $bar = Format-WcdAsciiProgressBar -CompletedSteps $State.CompletedSteps -TotalSteps $State.TotalSteps
@@ -763,14 +746,11 @@ function Update-WcdProgressState {
     .PARAMETER Event
         'Start' or 'Finish'.
 
-    .PARAMETER Kind
-        Outcome of a finished Step: 'success', 'warning' or 'error'.
-
     .OUTPUTS
         None. Mutates State and writes to the host.
 
     .EXAMPLE
-        Update-WcdProgressState -State $state -StepKey 'ScreenTimeoutAc' -Event 'Finish' -Kind 'success'
+        Update-WcdProgressState -State $state -StepKey 'ScreenTimeoutAc' -Event 'Finish'
     #>
     [CmdletBinding()]
     param(
@@ -782,13 +762,9 @@ function Update-WcdProgressState {
 
         [Parameter(Mandatory)]
         [ValidateSet('Start', 'Finish')]
-        [string]$Event,
-
-        [ValidateSet('success', 'warning', 'error')]
-        [string]$Kind = 'success'
+        [string]$Event
     )
 
-    $currentStepLabel = if ($State.StepLabels.ContainsKey($StepKey)) { $State.StepLabels[$StepKey] } else { $StepKey }
     $State.CurrentStepKey = $StepKey
 
     if ($Event -eq 'Finish') {
@@ -798,17 +774,11 @@ function Update-WcdProgressState {
             $State.CompletedSteps = [Math]::Min($State.CompletedSteps + 1, $State.TotalSteps)
         }
 
-        $phaseText = switch ($Kind) {
-            'warning' { 'Step finished with a warning' }
-            'error' { 'Step failed' }
-            default { 'Step finished' }
-        }
-
-        Write-WcdProgressSnapshot -State $State -CurrentStepLabel $currentStepLabel -PhaseText $phaseText -Kind $Kind
+        Write-WcdProgressSnapshot -State $State
         return
     }
 
-    Write-WcdProgressSnapshot -State $State -CurrentStepLabel $currentStepLabel -PhaseText 'Running' -Kind 'running'
+    Write-WcdProgressSnapshot -State $State
 }
 
 function Invoke-WcdProgressCallback {

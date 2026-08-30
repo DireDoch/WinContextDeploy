@@ -2,10 +2,10 @@
 # WinContextDeploy.psd1
 # =============================================================================
 # Every environment-specific value lives here. Edit this file rather than the
-# scripts in src/ — adding, removing or reordering an application never
+# scripts in src/ - adding, removing or reordering an application never
 # requires a code change.
 #
-# Format: PowerShell Data File — loaded with Import-PowerShellDataFile
+# Format: PowerShell Data File - loaded with Import-PowerShellDataFile
 # =============================================================================
 
 @{
@@ -39,7 +39,7 @@
     #                         tools menu instead (see below).
     #
     # The entries below are examples covering every Action. Replace them with
-    # your own — the shipped defaults are deliberately generic.
+    # your own - the shipped defaults are deliberately generic.
     # =========================================================================
     Applications = @(
 

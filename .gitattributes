@@ -1,0 +1,16 @@
+# Normalise line endings so a clone behaves the same on every machine.
+* text=auto eol=lf
+
+# Windows-only entry points. cmd.exe parses labels and `goto` by byte offset,
+# and a LF-only .cmd can misbehave on those - the launcher uses both. Force
+# CRLF on checkout regardless of the contributor's core.autocrlf setting.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Windows PowerShell 5.1 is happiest with CRLF, and these only ever run there.
+*.ps1  text eol=crlf
+*.psd1 text eol=crlf
+*.psm1 text eol=crlf
+
+# Built artefact: never diff or merge it, just take the incoming version.
+docs/manual.pdf binary

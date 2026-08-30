@@ -7,6 +7,7 @@ on:
 
 jobs:
   pester:
+    name: Pester (Windows)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,3 +19,36 @@ jobs:
           Import-Module Pester -RequiredVersion 5.7.1
           $result = Invoke-Pester ./tests/*.Tests.ps1 -Output Detailed -PassThru
           if ($result.FailedCount -gt 0) { exit 1 }
+
+  analyze:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -SkipPublisherCheck
+          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          if ($findings) {
+              $findings | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+              Write-Host "::error::PSScriptAnalyzer reported $($findings.Count) finding(s)."
+              exit 1
+          }
+          Write-Host 'PSScriptAnalyzer: clean.'
+
+  manual:
+    name: Manual builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The PDF is committed, so this only proves the source still compiles -
+      # it is what stops docs/manual.typ rotting while nobody rebuilds it.
+      - uses: typst-community/setup-typst@v4
+        with:
+          typst-version: "0.15.1"
+
+      - name: Compile the manual
+        run: typst compile docs/manual.typ /tmp/manual.pdf

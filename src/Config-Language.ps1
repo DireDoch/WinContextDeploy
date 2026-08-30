@@ -281,21 +281,21 @@ function Set-WcdLanguageConfiguration {
     )
 
     $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
-    $profile = Get-WcdLanguageProfile -Culture $Culture
+    $languageProfile = Get-WcdLanguageProfile -Culture $Culture
     $results = @()
     $moduleName = 'Config-Language'
 
     try {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisplayLanguage' -Event 'Start'
-        $languageList = New-WcdLanguageList -Culture $profile.Culture -FallbackCultures $profile.FallbackCultures
+        $languageList = New-WcdLanguageList -Culture $languageProfile.Culture -FallbackCultures $languageProfile.FallbackCultures
         if ($languageList.Count -gt 0 -and $null -ne $languageList[0].PSObject.Properties['InputMethodTips']) {
             $languageList[0].InputMethodTips.Clear()
-            [void]$languageList[0].InputMethodTips.Add($profile.KeyboardTip)
+            [void]$languageList[0].InputMethodTips.Add($languageProfile.KeyboardTip)
         }
 
         Set-WcdLanguageList -LanguageList $languageList
-        Set-WcdLocaleOverrides -Culture $profile.Culture -GeoId $profile.GeoId -LogPath $resolvedLogPath
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Display language: {0} applied.' -f $profile.LanguageLabel)
+        Set-WcdLocaleOverrides -Culture $languageProfile.Culture -GeoId $languageProfile.GeoId -LogPath $resolvedLogPath
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Display language: {0} applied.' -f $languageProfile.LanguageLabel)
         Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Some UWP apps may need a sign-out and sign-in before the new language shows.'
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisplayLanguage' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'DisplayLanguage'; Success = $true; Error = '' }
@@ -307,8 +307,8 @@ function Set-WcdLanguageConfiguration {
 
     try {
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'KeyboardLayout' -Event 'Start'
-        Set-WcdKeyboardOverride -InputTip $profile.KeyboardTip
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Keyboard: {0} applied.' -f $profile.KeyboardLabel)
+        Set-WcdKeyboardOverride -InputTip $languageProfile.KeyboardTip
+        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Keyboard: {0} applied.' -f $languageProfile.KeyboardLabel)
         Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'KeyboardLayout' -Event 'Finish' -Kind 'success'
         $results += [pscustomobject]@{ Step = 'KeyboardLayout'; Success = $true; Error = '' }
     } catch {

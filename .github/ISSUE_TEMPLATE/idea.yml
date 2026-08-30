@@ -1,0 +1,48 @@
+name: Idea or suggestion
+description: A step you do by hand, something the tool should support, anything at all
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas do not have to come with code, or even with a solution. If you
+        repeat something by hand on every machine, describing it is enough.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you do by hand today?
+      description: The step, the setting, the check — however you would describe it to a colleague.
+      placeholder: On every laptop I also have to set the BIOS password prompt to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter?
+      description: What goes wrong when it is forgotten, or how long it costs you.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: Does this feel like a manifest entry or a new module?
+      description: A guess is fine — "no idea" is a perfectly good answer.
+      options:
+        - No idea
+        - Opening or checking an application (probably a manifest entry)
+        - A Windows setting or registry change (probably a module)
+        - Something about the diagnostic or the report
+        - Something else
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Your fleet, your constraints, a link — whatever helps.
+    validations:
+      required: false
