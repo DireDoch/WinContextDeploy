@@ -1,6 +1,57 @@
+```
+ __          ___        _____            _            _   _____             _             
+ \ \        / (_)      / ____|          | |          | | |  __ \           | |            
+  \ \  /\  / / _ _ __ | |     ___  _ __ | |_ _____  _| |_| |  | | ___ _ __ | | ___  _   _ 
+   \ \/  \/ / | | '_ \| |    / _ \| '_ \| __/ _ \ \/ / __| |  | |/ _ \ '_ \| |/ _ \| | | |
+    \  /\  /  | | | | | |___| (_) | | | | ||  __/>  <| |_| |__| |  __/ |_) | | (_) | |_| |
+     \/  \/   |_|_| |_|\_____\___/|_| |_|\__\___/_/\_\\__|_____/ \___| .__/|_|\___/ \__, |
+                                                                     | |             __/ |
+                                                                     |_|            |___/ 
+```
+
+<div align="center">
+
 # WinContextDeploy
 
-Interactive PowerShell tool for post-image configuration of Windows 11 machines.
+**Post-image configuration and quick device diagnostics for Windows 11**
+
+[![Tests](https://github.com/DireDoch/WinContextDeploy/actions/workflows/tests.yml/badge.svg)](https://github.com/DireDoch/WinContextDeploy/actions/workflows/tests.yml)
+[![Manual](https://img.shields.io/badge/manual-PDF-1f4e79)](docs/manual.pdf)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+</div>
+
+---
+
+## Where this comes from
+
+This is a spin-off of a PowerShell script I wrote on the job as an IT technician,
+where we deployed **more than 300 machines a year** — laptops, desktops, thin
+endpoints, engineering workstations, each one wanting something slightly
+different from the last.
+
+The image is identical on every machine. What comes *after* the image is not, and
+that is where the twenty minutes go: the same settings dialogs in the same order,
+except for the three that depend on whether this one has a battery, or runs its
+applications locally, or belongs to somebody who needs a French interface. Miss
+one and nobody finds out until the user does.
+
+The script cut **7–8 minutes off every deployment** — call it a full working week
+back over 300 machines — but the time was never really the point. The point was
+that the twentieth machine of the week got the same treatment as the first, and
+that a technician could hand back a checklist saying so.
+
+WinContextDeploy is that idea, rebuilt in the open: the site-specific parts moved
+out into a manifest you edit, the diagnostic taught to say what to do about a
+failure rather than just print an exception, and the whole thing documented well
+enough that somebody who has never written PowerShell can extend it.
+
+> 📖 **[Read the manual (PDF)](docs/manual.pdf)** — what the tool does, what it
+> leaves to you, how the pieces fit together, and how to add your own module.
+> Source in [`docs/manual.typ`](docs/manual.typ), built with
+> [Typst](https://typst.app/).
+
+## What it does
 
 A technician runs it once on a freshly imaged machine. It applies OS settings that
 depend on the machine's context, opens the applications that need to be checked by
@@ -11,6 +62,7 @@ It does **not** install software. Applications are expected to arrive through yo
 imaging pipeline; this tool verifies they are there and puts them in front of the
 technician.
 
+> [!WARNING]
 > Running this changes system settings (taskbar, regional separators, power plan,
 > keyboard/language). Read `WinContextDeploy.psd1` and adjust the paths to your
 > environment before first use.
@@ -185,12 +237,44 @@ tests/
 
 ## Documentation
 
-- [`docs/manual.pdf`](docs/manual.pdf) — the full manual: what the tool does,
-  how to add a module, and how to read the diagnostic. Source in
-  [`docs/manual.typ`](docs/manual.typ), built with
-  [Typst](https://typst.app/) (`typst compile docs/manual.typ`).
-- `Get-Help <function>` works on every function in `src/`.
+- **[The manual (PDF)](docs/manual.pdf)** — 24 pages: what the tool does, what
+  it leaves to you, the architecture in diagrams, PowerShell explained from
+  nothing, how to add your own module, and how to read the diagnostic when
+  something goes wrong.
+  Source in [`docs/manual.typ`](docs/manual.typ) — rebuild it with
+  `typst compile docs/manual.typ`.
+- `Get-Help <function>` works on every function in `src/`, examples included.
+
+## Contributing
+
+Ideas are genuinely welcome, and they do not have to come with code.
+
+This started as one technician's script for one fleet, which means the parts that
+felt obvious to me may well be wrong for you. If your machines need something
+mine never did, that is worth an issue — even if it is only a sentence
+describing what you do by hand today.
+
+Things that are always useful:
+
+- **A configuration step you still do manually.** If you repeat it on every
+  machine, it probably belongs here. Say what it is; the how can be worked out.
+- **An `Action` the manifest cannot express.** The five that exist covered my
+  fleet. They will not cover everyone's.
+- **A place where the diagnostic told you nothing useful.** A failure that does
+  not name its fix is a bug in this project, not a fact of life.
+- **Anything the manual explains badly.** If a chapter did not answer the
+  question you actually had, that is worth reporting.
+- **Bug reports.** Include the relevant lines from `log.txt`, or the JSON report
+  from `-ReportPath` if you have one.
+
+If you would rather send code: fork it, work on a branch, keep
+`Invoke-Pester .\tests\*.Tests.ps1` green, and open a pull request. New modules
+want a test file and a comment-based help block — chapter 7 of the manual walks
+through both, with a template to copy.
+
+No contribution is too small, and "I tried this and it did not work" is a
+perfectly good contribution.
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE). Do what you like with it.
