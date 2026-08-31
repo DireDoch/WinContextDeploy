@@ -36,7 +36,7 @@ except for the three that depend on whether this one has a battery, or runs its
 applications locally, or belongs to somebody who needs a French interface. Miss
 one and nobody finds out until the user does.
 
-The script cut **7–8 minutes off every deployment** — call it a full working week
+The script cut **7–8 minutes off every deployment (Mininum btw)** — call it a full working week
 back over 300 machines — but the time was never really the point. The point was
 that the twentieth machine of the week got the same treatment as the first, and
 that a technician could hand back a checklist saying so.
