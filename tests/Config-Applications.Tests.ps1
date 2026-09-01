@@ -95,4 +95,102 @@ Describe 'Config-Applications' {
         $results[0].Success | Should -BeTrue
         $results[0].Error | Should -Match 'not found'
     }
+
+    Context 'CheckWinget' {
+        BeforeAll {
+            # Hors du manifeste partage: les autres tests lancent toutes les
+            # cibles, et aucune ne doit appeler winget pour de vrai.
+            $script:WingetTargets = @(
+                @{ Step = 'AppWinget'; Name = 'PowerToys'; Action = 'CheckWinget'; Target = 'Microsoft.PowerToys' }
+            )
+            $script:WingetOptionalTargets = @(
+                @{ Step = 'AppWingetOpt'; Name = 'Fancy tool'; Action = 'CheckWinget'; Target = 'Vendor.FancyTool'; Optional = $true }
+            )
+        }
+
+        It 'rapporte un paquet installe comme reussi' {
+            $logPath = Join-Path $TestDrive 'log_winget_ok.txt'
+            Mock -CommandName 'Test-WcdWingetAvailable' { $true }
+            Mock -CommandName 'Test-WcdWingetPackageInstalled' { $true }
+
+            $results = @(Set-WcdApplicationsConfiguration -Targets $script:WingetTargets -OpenApps $true -LogPath $logPath)
+
+            $results.Count | Should -Be 1
+            $results[0].Step | Should -Be 'AppWinget'
+            $results[0].Success | Should -BeTrue
+            $results[0].Error | Should -BeNullOrEmpty
+        }
+
+        It 'avertit quand le paquet n est pas installe' {
+            $logPath = Join-Path $TestDrive 'log_winget_absent.txt'
+            Mock -CommandName 'Test-WcdWingetAvailable' { $true }
+            Mock -CommandName 'Test-WcdWingetPackageInstalled' { $false }
+
+            $results = @(Set-WcdApplicationsConfiguration -Targets $script:WingetTargets -OpenApps $true -LogPath $logPath)
+
+            $results[0].Severity | Should -Be 'WARNING'
+            $results[0].Success | Should -BeTrue
+            $results[0].RemedyKey | Should -Be 'WingetPackageMissing'
+        }
+
+        It 'traite un paquet optionnel absent comme une note' {
+            $logPath = Join-Path $TestDrive 'log_winget_optional.txt'
+            Mock -CommandName 'Test-WcdWingetAvailable' { $true }
+            Mock -CommandName 'Test-WcdWingetPackageInstalled' { $false }
+
+            $results = @(Set-WcdApplicationsConfiguration -Targets $script:WingetOptionalTargets -OpenApps $true -LogPath $logPath)
+
+            $results[0].Severity | Should -Be 'INFO'
+            $results[0].RemedyKey | Should -Be ''
+        }
+
+        It 'signale une seule cause et passe les entrees en MANUAL quand winget est absent' {
+            $logPath = Join-Path $TestDrive 'log_winget_missing.txt'
+            Mock -CommandName 'Test-WcdWingetAvailable' { $false }
+            Mock -CommandName 'Test-WcdWingetPackageInstalled' { throw 'winget ne doit pas etre appele.' }
+
+            $targets = @($script:WingetTargets + $script:WingetOptionalTargets)
+            $results = @(Set-WcdApplicationsConfiguration -Targets $targets -OpenApps $true -LogPath $logPath)
+
+            $probe = @($results | Where-Object Step -eq 'WingetUnavailable')
+            $probe.Count | Should -Be 1
+            $probe[0].Severity | Should -Be 'WARNING'
+            $probe[0].RemedyKey | Should -Be 'WingetMissing'
+
+            # une cause honnete, et une ligne actionnable par paquet
+            @($results | Where-Object { $_.Step -like 'AppWinget*' }).Severity | Should -Be @('MANUAL', 'MANUAL')
+            Should -Invoke -CommandName 'Test-WcdWingetAvailable' -Times 1 -Exactly
+        }
+
+        It 'traite un echec de winget comme une erreur, pas comme un paquet absent' {
+            $logPath = Join-Path $TestDrive 'log_winget_broken.txt'
+            Mock -CommandName 'Test-WcdWingetAvailable' { $true }
+            Mock -CommandName 'Test-WcdWingetPackageInstalled' { throw 'winget list failed for Microsoft.PowerToys (exit 5).' }
+
+            $results = @(Set-WcdApplicationsConfiguration -Targets $script:WingetTargets -OpenApps $true -LogPath $logPath)
+
+            $results[0].Severity | Should -Be 'ERROR'
+            $results[0].Success | Should -BeFalse
+            $results[0].RemedyKey | Should -Be 'WingetCheckFailed'
+        }
+
+        It 'lit le code de sortie de winget: 0 installe, code introuvable absent, autre erreur' {
+            # -Scope 1 pose LASTEXITCODE dans le scope appelant, la ou
+            # Test-WcdWingetPackageInstalled le relit.
+            function winget.exe {
+                Set-Variable -Name 'LASTEXITCODE' -Value $script:WingetExit -Scope 1
+                'sortie winget'
+            }
+
+            $script:WingetExit = 0
+            Test-WcdWingetPackageInstalled -Id 'Microsoft.PowerToys' | Should -BeTrue
+
+            # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND
+            $script:WingetExit = -1978335212
+            Test-WcdWingetPackageInstalled -Id 'Microsoft.PowerToys' | Should -BeFalse
+
+            $script:WingetExit = 5
+            { Test-WcdWingetPackageInstalled -Id 'Microsoft.PowerToys' } | Should -Throw
+        }
+    }
 }

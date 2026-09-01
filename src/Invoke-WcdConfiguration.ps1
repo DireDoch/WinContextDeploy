@@ -163,6 +163,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Helpdesk       = 'Helpdesk portal'
             Favorites      = 'Browser favorites'
             Network        = 'Network adapters'
+            Winget         = 'App Installer (winget)'
             DiskHealth     = 'Disk health'
             DiskFreeSpace  = 'Free space'
             Tpm            = 'TPM readiness'
@@ -283,6 +284,9 @@ $T = if ($ScriptUI -eq 'EN') {
             TargetMissing       = "Not found at {0}. Update Applications['{1}'].Target in WinContextDeploy.psd1, or remove the entry."
             TargetLaunchFailed  = "Could not start {0}. Check Applications['{1}'].Target and Action in WinContextDeploy.psd1."
             ProcessNotRunning   = 'Confirm {0} is installed and started, or mark the entry Optional in WinContextDeploy.psd1.'
+            WingetMissing       = 'App Installer (winget) is not provisioned on this image, so the packages below could not be checked. Verify them by hand, or install App Installer from the Microsoft Store.'
+            WingetPackageMissing = "winget does not list {0} as installed. Confirm imaging delivered it, or fix the package id in Applications['{1}'].Target in WinContextDeploy.psd1."
+            WingetCheckFailed   = "winget could not check {0}. Run 'winget list --id {1} --exact' by hand to see why."
             UnknownAction       = "Unknown Action '{0}' for step '{1}'. Valid: {2}."
             RequiresAdmin       = 'Requires Administrator. Relaunch elevated to apply.'
             PowerCfgFailed      = 'powercfg refused the change. Check that no Group Policy pins the power plan.'
@@ -329,6 +333,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Helpdesk       = 'Portail de soutien'
             Favorites      = 'Favoris du navigateur'
             Network        = 'Adaptateurs reseau'
+            Winget         = 'App Installer (winget)'
             DiskHealth     = 'Sante du disque'
             DiskFreeSpace  = 'Espace libre'
             Tpm            = 'Etat du TPM'
@@ -449,6 +454,9 @@ $T = if ($ScriptUI -eq 'EN') {
             TargetMissing       = "Introuvable a {0}. Corriger Applications['{1}'].Target dans WinContextDeploy.psd1, ou retirer l entree."
             TargetLaunchFailed  = "Impossible de demarrer {0}. Verifier Applications['{1}'].Target et Action dans WinContextDeploy.psd1."
             ProcessNotRunning   = 'Confirmer que {0} est installe et demarre, ou marquer l entree Optional dans WinContextDeploy.psd1.'
+            WingetMissing       = 'App Installer (winget) n est pas provisionne sur cette image, donc les paquets ci-dessous n ont pas pu etre verifies. Les verifier a la main, ou installer App Installer depuis le Microsoft Store.'
+            WingetPackageMissing = "winget ne liste pas {0} comme installe. Confirmer que l imagerie l a livre, ou corriger l identifiant de paquet dans Applications['{1}'].Target dans WinContextDeploy.psd1."
+            WingetCheckFailed   = "winget n a pas pu verifier {0}. Lancer 'winget list --id {1} --exact' a la main pour voir pourquoi."
             UnknownAction       = "Action '{0}' inconnue pour l etape '{1}'. Valides: {2}."
             RequiresAdmin       = 'Exige les droits Administrateur. Relancer en tant qu administrateur pour appliquer.'
             PowerCfgFailed      = 'powercfg a refuse la modification. Verifier qu aucune GPO ne fige le mode de gestion d alimentation.'
@@ -1481,6 +1489,12 @@ function Resolve-WcdAutomaticEntry {
         return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels) -Step $stepId
     }
 
+    # A Step the Module could not run, and deliberately handed back to the
+    # technician, is a Manual Step rather than a failure.
+    if ($severity -eq 'MANUAL') {
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'manual' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels) -Step $stepId
+    }
+
     if ($missingStepKeys.Count -gt 0) {
         $missingLabels = @($missingStepKeys | ForEach-Object {
             if ($StepLabels.ContainsKey($_)) { $StepLabels[$_] } else { $_ }
@@ -1724,6 +1738,13 @@ function Get-WcdFinalChecklistEntries {
         -FormFactor $ExecutionOptions.FormFactor `
         -OptionalTools $ExecutionOptions.OptionalTools |
         ForEach-Object { [string]$_.Step })
+
+    # Config-Applications reports the winget probe once, and only when the
+    # manifest has CheckWinget entries at all.
+    if ($lookup.ContainsKey('WingetUnavailable')) {
+        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Winget -ResultLookup $lookup `
+            -StepKeys @('WingetUnavailable') -StepLabels $StepLabels
+    }
 
     foreach ($entry in @($Config.Applications)) {
         $step = [string]$entry.Step

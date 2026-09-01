@@ -648,7 +648,17 @@ The manifest-driven core of the tool. It walks the `Applications` list in
   [`OpenUrl`], [Opens a URL in the default browser.],
   [`CheckProcess`], [Verifies a process is running. Launches nothing. `Target` is a list of process names, and any one of them counts.],
   [`CheckPath`], [Verifies a path exists. Launches nothing.],
+  [`CheckWinget`], [Verifies a winget package id is installed. Launches nothing, and installs nothing. `Target` is the exact package id.],
 )
+
+#note[
+  `CheckWinget` exists because an install path moves between versions and
+  between machines — a per-user MSIX lands somewhere quite different from a
+  per-machine MSI — while the package id does not. winget itself is missing from
+  LTSC and stripped images: the run probes for it once, reports that as a single
+  warning, and marks every `CheckWinget` entry as a Manual Step to verify by
+  hand. One honest cause, and rows a technician can act on.
+]
 
 Adding, removing or reordering an application is a manifest edit. No code
 changes, no new module.

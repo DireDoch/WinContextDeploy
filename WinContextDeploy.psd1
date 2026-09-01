@@ -31,6 +31,9 @@
     #                 CheckProcess  verify a process is running, launch nothing
     #                               (Target is an array of process names)
     #                 CheckPath     verify a path exists, launch nothing
+    #                 CheckWinget   verify a winget package id is installed,
+    #                               launch nothing, install nothing (Target is
+    #                               the exact package id)
     #   Target      Path, URL, command, or array of process names. Required.
     #   Environment Restrict to 'Workstation' or 'Vdi'. Omit to always apply.
     #   FormFactor  Restrict to 'Laptop' or 'Desktop'. Omit to always apply.
@@ -144,6 +147,17 @@
             Target = 'https://www.nvidia.com/en-eu/software/nvidia-app/'
             Prompt = $true
         }
+
+        # Verify a package that arrived through App Installer. The package id
+        # is stable where an install path is not. Never installs anything, and
+        # on an image without winget the entry becomes a Manual Step.
+        # @{
+        #     Step     = 'AppPowerToys'
+        #     Name     = 'PowerToys'
+        #     Action   = 'CheckWinget'
+        #     Target   = 'Microsoft.PowerToys'
+        #     Optional = $true
+        # }
 
         # @{
         #     Step   = 'AppFleetTelemetry'
