@@ -164,6 +164,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Favorites      = 'Browser favorites'
             Network        = 'Network adapters'
             Winget         = 'App Installer (winget)'
+            WindowsUpdate  = 'Windows Update'
             DiskHealth     = 'Disk health'
             DiskFreeSpace  = 'Free space'
             Tpm            = 'TPM readiness'
@@ -241,6 +242,8 @@ $T = if ($ScriptUI -eq 'EN') {
         StandardManualDetail    = 'Must be done manually.'
         IdentityManualDetail    = 'Not requested this run. Must be done manually if the machine needs it.'
         RestartManualDetail     = 'New computer name / domain membership takes effect after a restart.'
+        RestartUpdateManualDetail = 'An installed Windows update is waiting on a restart.'
+        RestartBothManualDetail = 'One restart covers both: the new computer name / domain membership, and an installed Windows update waiting on it.'
         SecondaryNA             = 'Not applicable to the chosen Form Factor or Environment.'
         DeskWindowsDetail       = 'Must be done manually on the Windows desktop.'
         StepCount               = 'step(s)'
@@ -287,6 +290,8 @@ $T = if ($ScriptUI -eq 'EN') {
             WingetMissing       = 'App Installer (winget) is not provisioned on this image, so the packages below could not be checked. Verify them by hand, or install App Installer from the Microsoft Store.'
             WingetPackageMissing = "winget does not list {0} as installed. Confirm imaging delivered it, or fix the package id in Applications['{1}'].Target in WinContextDeploy.psd1."
             WingetCheckFailed   = "winget could not check {0}. Run 'winget list --id {1} --exact' by hand to see why."
+            WindowsUpdateFailed = 'Run Windows Update by hand and let the failed update through before handover.'
+            RebootPending       = 'Restart the machine before handover; the update is not finished until it does.'
             UnknownAction       = "Unknown Action '{0}' for step '{1}'. Valid: {2}."
             RequiresAdmin       = 'Requires Administrator. Relaunch elevated to apply.'
             PowerCfgFailed      = 'powercfg refused the change. Check that no Group Policy pins the power plan.'
@@ -334,6 +339,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Favorites      = 'Favoris du navigateur'
             Network        = 'Adaptateurs reseau'
             Winget         = 'App Installer (winget)'
+            WindowsUpdate  = 'Windows Update'
             DiskHealth     = 'Sante du disque'
             DiskFreeSpace  = 'Espace libre'
             Tpm            = 'Etat du TPM'
@@ -411,6 +417,8 @@ $T = if ($ScriptUI -eq 'EN') {
         StandardManualDetail    = 'A faire manuellement.'
         IdentityManualDetail    = 'Non demande cette fois. A faire manuellement si le poste en a besoin.'
         RestartManualDetail     = 'Le nouveau nom du poste et l appartenance au domaine prennent effet apres un redemarrage.'
+        RestartUpdateManualDetail = 'Une mise a jour Windows installee attend un redemarrage.'
+        RestartBothManualDetail = 'Un seul redemarrage suffit: le nouveau nom du poste et l appartenance au domaine, et une mise a jour Windows installee qui l attend.'
         SecondaryNA             = 'Non applicable au type de poste ou a l usage choisi.'
         DeskWindowsDetail       = 'A faire manuellement sur le bureau Windows.'
         StepCount               = 'etape(s)'
@@ -457,6 +465,8 @@ $T = if ($ScriptUI -eq 'EN') {
             WingetMissing       = 'App Installer (winget) n est pas provisionne sur cette image, donc les paquets ci-dessous n ont pas pu etre verifies. Les verifier a la main, ou installer App Installer depuis le Microsoft Store.'
             WingetPackageMissing = "winget ne liste pas {0} comme installe. Confirmer que l imagerie l a livre, ou corriger l identifiant de paquet dans Applications['{1}'].Target dans WinContextDeploy.psd1."
             WingetCheckFailed   = "winget n a pas pu verifier {0}. Lancer 'winget list --id {1} --exact' a la main pour voir pourquoi."
+            WindowsUpdateFailed = 'Lancer Windows Update a la main et laisser passer la mise a jour en echec avant la remise du poste.'
+            RebootPending       = 'Redemarrer le poste avant la remise; la mise a jour n est pas terminee tant qu il ne l est pas.'
             UnknownAction       = "Action '{0}' inconnue pour l etape '{1}'. Valides: {2}."
             RequiresAdmin       = 'Exige les droits Administrateur. Relancer en tant qu administrateur pour appliquer.'
             PowerCfgFailed      = 'powercfg a refuse la modification. Verifier qu aucune GPO ne fige le mode de gestion d alimentation.'
@@ -1696,8 +1706,21 @@ function Get-WcdFinalChecklistEntries {
     # has succeeds without changing anything a restart would take effect for.
     $identityApplied = @(Get-WcdResultsForSteps -ResultLookup $lookup -StepKeys @('ComputerName', 'DomainJoin') |
         Where-Object { $_.Applied })
-    if ($identityApplied.Count -gt 0) {
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.RestartNeeded -Kind 'manual' -Detail $T.RestartManualDetail
+    # An update waiting on a restart needs the same restart the rename does, so
+    # the row is raised once and names whichever causes apply. Two restart rows
+    # would read as two restarts.
+    $updateRebootPending = @(Get-WcdResultsForSteps -ResultLookup $lookup -StepKeys @('WindowsUpdateReboot') |
+        Where-Object { $_.RebootPending })
+    if ($identityApplied.Count -gt 0 -or $updateRebootPending.Count -gt 0) {
+        $restartDetail = if ($identityApplied.Count -gt 0 -and $updateRebootPending.Count -gt 0) {
+            $T.RestartBothManualDetail
+        } elseif ($updateRebootPending.Count -gt 0) {
+            $T.RestartUpdateManualDetail
+        } else {
+            $T.RestartManualDetail
+        }
+
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.RestartNeeded -Kind 'manual' -Detail $restartDetail
     }
 
     # --- OS configuration, in the order the modules run -----------------------
@@ -1727,6 +1750,11 @@ function Get-WcdFinalChecklistEntries {
         -StepKeys @('TpmReadiness') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.BitLocker -ResultLookup $lookup `
         -StepKeys @('BitLockerStatus') -StepLabels $StepLabels
+    # One row for both update Steps: a failed update and a pending restart are
+    # the same conversation with the technician, and the restart itself is asked
+    # for once, in the restart row above.
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.WindowsUpdate -ResultLookup $lookup `
+        -StepKeys @('WindowsUpdateHistory', 'WindowsUpdateReboot') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Network -ResultLookup $lookup `
         -StepKeys @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') -StepLabels $StepLabels
 
@@ -1861,6 +1889,7 @@ $modules = @(
     @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' },
     @{ Name = 'Config-Disk';          File = 'Config-Disk.ps1' },
     @{ Name = 'Config-BitLocker';     File = 'Config-BitLocker.ps1' },
+    @{ Name = 'Config-WindowsUpdate'; File = 'Config-WindowsUpdate.ps1' },
     @{ Name = 'Config-Network';       File = 'Config-Network.ps1' },
     @{ Name = 'Config-Printer';       File = 'Config-Printer.ps1' }
 )
@@ -1967,6 +1996,9 @@ foreach ($mod in $modules) {
             }
             'Config-BitLocker' {
                 $modResults = @(Set-WcdBitLockerStatus -Elevated $isElevated -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+            }
+            'Config-WindowsUpdate' {
+                $modResults = @(Set-WcdWindowsUpdateStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Network' {
                 $modResults = @(Set-WcdNetworkDiagnostics -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)

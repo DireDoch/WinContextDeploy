@@ -117,6 +117,8 @@ the manifest key to edit — when something needs one.
   [x]  Free space               OK         412 GB free of 476 GB
   [x]  TPM readiness            OK         TPM present and ready.
   [x]  Drive encryption         OK         Protected: C: FullyEncrypted.
+  [x]  Windows Update           OK         No failed update in the last 50 entries
+                                           (30 days). | Restart pending: none.
   [x]  Network adapters         OK
   [x]  Outlook                  OK
   [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).
@@ -271,6 +273,15 @@ after enrolment will see the warning on a fresh machine, which is the correct
 thing for a handover checklist to say. The tool only ever reports — it never
 enables BitLocker and never touches a recovery key.
 
+*Windows Update* is read twice and never searched: the recent update history
+(the last 50 entries, and only the last 30 days) and the `RebootRequired` key.
+An update that tried and failed is a warning naming the update and its HRESULT;
+a restart Windows is waiting for is a warning too, folded into the single
+`Restart required` row so one restart covers it and a rename both. Neither reads
+the network. "Are updates pending" is deliberately not checked — that search goes
+to Microsoft, takes minutes, can hang, and a freshly imaged machine always has
+some, so it would warn on every run.
+
 `Domain.Name` is the domain the machine-identity prompt offers to join, and
 `Domain.OUPath` the optional organisational unit the machine account is created
 in. Leave `Name` empty and the domain option disappears from the prompt entirely,
@@ -354,7 +365,7 @@ tests/
 
 ## Documentation
 
-- **[The manual (PDF)](docs/manual.pdf)** — 27 pages: what the tool does, what
+- **[The manual (PDF)](docs/manual.pdf)** — 28 pages: what the tool does, what
   it leaves to you, the architecture in diagrams, PowerShell explained from
   nothing, how to add your own module, and how to read the diagnostic when
   something goes wrong.
