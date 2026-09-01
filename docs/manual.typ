@@ -382,6 +382,7 @@ module, which is the view that tells you whether the run itself went well:
   cline("  [x]  Config-Language           OK        2 step(s)", fill: cGreen),
   cline("  [!]  Config-Applications       WARNING   9 step(s)  Warnings: AppVpn", fill: cYellow),
   cline("  [x]  Config-DeviceManager      OK        1 step(s)", fill: cGreen),
+  cline("  [x]  Config-Disk               OK        2 step(s)", fill: cGreen),
   cline("  [x]  Config-Network            OK        3 step(s)", fill: cGreen),
 )
 
@@ -398,6 +399,8 @@ thing that had to happen on this machine:
   cline("  [x]  Decimal separator        OK", fill: cGreen),
   cline("  [x]  Power options            OK", fill: cGreen),
   cline("  [x]  Device Manager           OK", fill: cGreen),
+  cline("  [x]  Disk health              OK", fill: cGreen),
+  cline("  [x]  Free space               OK         412 GB free of 476 GB", fill: cGreen),
   cline("  [x]  Network adapters         OK", fill: cGreen),
   cline("  [x]  Software Center          OK", fill: cGreen),
   cline("  [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).", fill: cYellow),
@@ -435,6 +438,7 @@ Your answers change what each module *does*, never the order they run in.
       ("Config-Language", "display language, keyboard"),
       ("Config-Applications", "verify and open the targets"),
       ("Config-DeviceManager", "devices Windows cannot configure"),
+      ("Config-Disk", "disk health, free space on the system drive"),
       ("Config-Network", "adapters, connectivity, network places"),
       ("Config-Printer", "shared print queues"),
     )
@@ -460,7 +464,7 @@ Your answers change what each module *does*, never the order they run in.
       if i == 0 { arrow((0, -3.34), (0, y + 0.33)) } else { arrow((0, y + 0.85 - 0.33), (0, y + 0.33)) }
     }
 
-    let last = top - 7 * 0.85
+    let last = top - 8 * 0.85
     dnode((0, last - 1.0), text(size: 8pt)[Final diagnostic: by module, then by step], w: 8.4, h: 0.68)
     dnode((0, last - 2.0), text(size: 8pt)[Write the log, the history block and the JSON report], w: 8.4, h: 0.68)
     dnode((0, last - 3.0), text(size: 8.5pt, weight: "bold", fill: white)[End],
@@ -472,7 +476,7 @@ Your answers change what each module *does*, never the order they run in.
     // Brace over the module band
     d.line((5.2, top + 0.33), (5.5, top + 0.33), (5.5, last - 0.33), (5.2, last - 0.33),
       stroke: 0.8pt + grey)
-    dlabel((7.1, (top + last) / 2), align(left)[8 modules, \ run in \ this order], size: 8pt)
+    dlabel((7.1, (top + last) / 2), align(left)[9 modules, \ run in \ this order], size: 8pt)
   })
 ]
 #v(0.2cm)
@@ -559,6 +563,44 @@ the user finds it a week later.
 
 Codes that resolve themselves — a pending reboot, a device not currently
 connected — are warnings. A missing or broken driver is an error.
+
+=== Config-Disk — disk health and free space
+
+A freshly imaged machine can still be sitting on a dying drive, or on a partition
+far smaller than the image expects. Neither shows up anywhere else in the run,
+and the technician usually finds out weeks later, from the user.
+
+Two steps. `Disk health` reads the health each disk reports: `Healthy` passes,
+`Warning` is a warning, `Unhealthy` is an error that names the drive and its
+serial number so the right one gets pulled. A status the drive does not report at
+all is a warning rather than a silent pass — an unreadable disk is not a healthy
+one. `Free space` reads the system drive and reports the figure either way, so an
+OK row still tells you how much room the machine has.
+
+Removable disks are left out of the health check. A technician's USB key is not
+the machine's disk, and it must never block a handover. Free space is read on the
+system drive only, for the same reason.
+
+#tip[
+  How much free space is enough is a fleet decision, so it lives in the manifest:
+
+  ```powershell
+  Disk = @{
+      MinFreeGB = 20
+  }
+  ```
+
+  Omit the key and the threshold is 20 GB. Below it the checklist warns and names
+  the figure and the threshold; the remediation points back at `Disk.MinFreeGB`,
+  so a threshold that is wrong for your fleet is one edit away.
+]
+
+#note[
+  Wear percentage and drive temperature — `Get-StorageReliabilityCounter` — are
+  deliberately not read. They are genuinely useful on refurbished machines, but
+  they need Administrator and return nothing on plenty of consumer SATA and NVMe
+  drives, so the step would silently report nothing on a large slice of any fleet.
+]
 
 === Config-Network — adapters, connectivity and network places
 
@@ -684,7 +726,7 @@ buildings inside.
 
     cont((0, 0), [WinContextDeploy.cmd], [Launcher])
     cont((5, 0), [Invoke-WcdConfiguration.ps1], [Orchestrator])
-    cont((10, 0), [Config-\*.ps1], [The 8 modules], fill: rgb("#eaf5ea"), stroke: okGreen)
+    cont((10, 0), [Config-\*.ps1], [The 9 modules], fill: rgb("#eaf5ea"), stroke: okGreen)
     cont((10, -2.6), [WinContextDeploy.psd1], [The manifest], fill: warnBox, stroke: warnOrange)
     cont((5, -2.6), [WcdHelpers.ps1], [Shared functions])
     cont((0, -2.6), [log.txt / report.json], [Output], fill: greyLight, stroke: grey)
@@ -1138,6 +1180,19 @@ function Set-WcdMyThingConfiguration {
 }
 ```
 
+#tip[
+  The template raises its own `Finish` event because it has one step. A module
+  with several — `Config-Disk` and `Config-Network` both have — should call
+  `Complete-WcdProgressStep` instead: it reads the Result your module just
+  recorded and picks the right progress kind, so a dozen branches never repeat
+  the mapping.
+
+  ```powershell
+  Complete-WcdProgressStep -ProgressCallback $ProgressCallback `
+      -ModuleName $moduleName -StepKey 'MyStep' -Results $results
+  ```
+]
+
 == Registering it
 
 Four small edits, all in files you already have.
@@ -1352,6 +1407,11 @@ Each log line is a timestamp, a level, and a message:
   [A `Config-*.ps1` is missing or misnamed],
   [Check that the file exists in `src/` and that its name matches the `File`
    value in `$modules`.],
+
+  [`Free space` warns on a machine that is fine],
+  [The threshold does not suit this fleet],
+  [The remediation names the key: raise or lower `Disk.MinFreeGB` in the manifest.
+   It defaults to 20 GB, which is generous on a 128 GB endpoint.],
 
   [The connectivity test fails on a working network],
   [The network drops ICMP to the internet],

@@ -108,6 +108,8 @@ the manifest key to edit — when something needs one.
   [x]  Display language         OK
   [x]  Power options            OK
   [x]  Device Manager           OK
+  [x]  Disk health              OK
+  [x]  Free space               OK         412 GB free of 476 GB
   [x]  Network adapters         OK
   [x]  Outlook                  OK
   [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).
@@ -120,7 +122,7 @@ the manifest key to edit — when something needs one.
   [-]  Mail signature           MANUAL     Must be done manually.
   [-]  Wi-Fi                    MANUAL     Must be done manually.
 
-Summary: 6 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.
+Summary: 8 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.
 ```
 
 `OK`, `WARNING` and `ERROR` are green, yellow and red in the console. `MANUAL`
@@ -236,6 +238,17 @@ direct-IP printer needs `Add-PrinterPort` and a driver in the driver store.
 `8.8.8.8`; point it at your gateway or an internal host if your network drops
 ICMP to the internet.
 
+`Disk.MinFreeGB` is how much free space the system drive must have before the
+machine is handed over. It defaults to 20. Below it the checklist warns and names
+the figure; at or above it the row still reports how much room the machine has,
+so an OK row is worth reading. An image that leaves 15 GB free on a 128 GB
+endpoint is normal for some fleets and a problem for others, which is why the
+number lives in the manifest.
+
+Disk *health* is not configurable — a drive reporting `Unhealthy` is an error
+everywhere. Removable disks are left out of that check, so a USB key in the port
+never affects the result.
+
 ## Branding
 
 The startup logo is read from `banner.txt` at the project root. To use your own,
@@ -302,7 +315,7 @@ tests/
 
 ## Documentation
 
-- **[The manual (PDF)](docs/manual.pdf)** — 24 pages: what the tool does, what
+- **[The manual (PDF)](docs/manual.pdf)** — 25 pages: what the tool does, what
   it leaves to you, the architecture in diagrams, PowerShell explained from
   nothing, how to add your own module, and how to read the diagnostic when
   something goes wrong.
