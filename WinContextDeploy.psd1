@@ -189,4 +189,24 @@
     Network = @{
         PingTarget = '8.8.8.8'
     }
+
+    # =========================================================================
+    # DISK
+    # =========================================================================
+    # MinFreeGB is how much free space the system drive must have before the
+    # machine is handed over. Below it, the checklist warns and names the
+    # figure; at or above it, the row still reports how much room the machine
+    # has. Omit the key and the threshold is 20 GB.
+    #
+    # An image that leaves 15 GB free on a 128 GB endpoint is normal for some
+    # fleets and a problem for others, which is why the number lives here
+    # rather than in the module.
+    #
+    # Disk health is not configurable: a drive reporting Unhealthy is an error
+    # everywhere. Removable disks are ignored, so a USB key in the port never
+    # affects the result.
+    # =========================================================================
+    Disk = @{
+        MinFreeGB = 20
+    }
 }

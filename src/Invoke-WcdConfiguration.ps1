@@ -151,6 +151,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Helpdesk       = 'Helpdesk portal'
             Favorites      = 'Browser favorites'
             Network        = 'Network adapters'
+            Disk           = 'Disk'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -246,6 +247,8 @@ $T = if ($ScriptUI -eq 'EN') {
             RegistryGpo         = "This machine's policy prevents the change; it must be applied by Group Policy instead."
             RegistryWriteFailed = 'The registry value could not be written. Check that the key is not held by another process.'
             PrinterUnreachable  = "Print server {0} is unreachable. Check the connection, or remove Printers['{1}'] from WinContextDeploy.psd1."
+            DiskUnhealthy       = 'Replace {0} before handover.'
+            DiskLowFreeSpace    = 'Free up space before handover, or raise Disk.MinFreeGB in WinContextDeploy.psd1 if that threshold is wrong for this fleet.'
         }
     }
 } else {
@@ -276,6 +279,7 @@ $T = if ($ScriptUI -eq 'EN') {
             Helpdesk       = 'Portail de soutien'
             Favorites      = 'Favoris du navigateur'
             Network        = 'Adaptateurs reseau'
+            Disk           = 'Disque'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -371,6 +375,8 @@ $T = if ($ScriptUI -eq 'EN') {
             RegistryGpo         = 'La politique de ce poste empeche la modification; elle doit passer par une GPO.'
             RegistryWriteFailed = 'La valeur de registre n a pas pu etre ecrite. Verifier que la cle n est pas detenue par un autre processus.'
             PrinterUnreachable  = "Serveur d impression {0} injoignable. Verifier la connexion, ou retirer Printers['{1}'] de WinContextDeploy.psd1."
+            DiskUnhealthy       = 'Remplacer {0} avant la remise du poste.'
+            DiskLowFreeSpace    = 'Liberer de l espace avant la remise du poste, ou augmenter Disk.MinFreeGB dans WinContextDeploy.psd1 si ce seuil ne convient pas au parc.'
         }
     }
 }
@@ -1474,6 +1480,8 @@ function Get-WcdFinalChecklistEntries {
         -StepKeys $powerStepKeys -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup `
         -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Disk -ResultLookup $lookup `
+        -StepKeys @('DiskHealth', 'DiskFreeSpace') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Network -ResultLookup $lookup `
         -StepKeys @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') -StepLabels $StepLabels
 
@@ -1598,6 +1606,7 @@ $modules = @(
     @{ Name = 'Config-Language';      File = 'Config-Language.ps1' },
     @{ Name = 'Config-Applications';  File = 'Config-Applications.ps1' },
     @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' },
+    @{ Name = 'Config-Disk';          File = 'Config-Disk.ps1' },
     @{ Name = 'Config-Network';       File = 'Config-Network.ps1' },
     @{ Name = 'Config-Printer';       File = 'Config-Printer.ps1' }
 )
@@ -1685,6 +1694,9 @@ foreach ($mod in $modules) {
             }
             'Config-DeviceManager' {
                 $modResults = @(Set-WcdDeviceManagerStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+            }
+            'Config-Disk' {
+                $modResults = @(Set-WcdDiskStatus -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Network' {
                 $modResults = @(Set-WcdNetworkDiagnostics -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)

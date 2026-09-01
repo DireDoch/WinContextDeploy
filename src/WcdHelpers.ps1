@@ -406,6 +406,8 @@ function Get-WcdTechnicalStepLabels {
         'KeyboardLayout'         = 'Keyboard layout'
         'ApplicationsSkip'       = 'Applications skipped'
         'DeviceManagerStatus'    = 'Device Manager'
+        'DiskHealth'             = 'Disk health'
+        'DiskFreeSpace'          = 'Free space'
         'NetworkAdapterStatus'   = 'Network adapters'
         'NetworkPing8888'        = 'Connectivity test'
         'RefreshNetworkPlaces'   = 'Refresh network places'
@@ -495,6 +497,7 @@ function Get-WcdModuleProgressPlan {
         'Config-Language' = @('DisplayLanguage', 'KeyboardLayout')
         'Config-Applications' = $applicationSteps
         'Config-DeviceManager' = @('DeviceManagerStatus')
+        'Config-Disk' = @('DiskHealth', 'DiskFreeSpace')
         'Config-Network' = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
         'Config-Printer' = $printerSteps
     }
