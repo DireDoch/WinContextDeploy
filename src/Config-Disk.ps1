@@ -93,7 +93,7 @@ function Get-WcdDiskHealthSeverity {
     }
 }
 
-function Format-WcdDiskName {
+function Format-WcdDiskSummary {
     <#
     .SYNOPSIS
         Names disks the way a technician can find them in a machine.
@@ -110,7 +110,7 @@ function Format-WcdDiskName {
         [string] e.g. 'WDC WD10EZEX (serial WD-WCC6Y1234567)'.
 
     .EXAMPLE
-        Format-WcdDiskName -Disks $unhealthy
+        Format-WcdDiskSummary -Disks $unhealthy
     #>
     [CmdletBinding()]
     param(
@@ -243,22 +243,6 @@ function Set-WcdDiskStatus {
     $moduleName = 'Config-Disk'
     $results = @()
 
-    # One place that decides the progress kind from the Result just recorded,
-    # so the branches below never have to repeat it.
-    $finishStep = {
-        param([string]$StepKey)
-
-        $last = @($results | Where-Object { $_.Step -eq $StepKey }) | Select-Object -Last 1
-        $kind = if ($null -eq $last) { 'success' } else {
-            switch (Get-WcdResultSeverity -Result $last) {
-                'ERROR'   { 'error' }
-                'WARNING' { 'warning' }
-                default   { 'success' }
-            }
-        }
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $StepKey -Event 'Finish' -Kind $kind
-    }
-
     # --- Disk health ---------------------------------------------------------
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DiskHealth' -Event 'Start'
 
@@ -278,7 +262,7 @@ function Set-WcdDiskStatus {
                 Error    = $message
             }
         } elseif ($unhealthy.Count -gt 0) {
-            $names = Format-WcdDiskName -Disks $unhealthy
+            $names = Format-WcdDiskSummary -Disks $unhealthy
             $message = 'Disk reported Unhealthy: {0}' -f $names
             Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('Disk: {0}' -f $message)
             $results += [pscustomobject]@{
@@ -290,7 +274,7 @@ function Set-WcdDiskStatus {
                 RemedyArgs = @($names)
             }
         } elseif ($warning.Count -gt 0) {
-            $message = 'Disk health not confirmed: {0} ({1})' -f (Format-WcdDiskName -Disks $warning), (@($warning | ForEach-Object { [string]$_.HealthStatus }) -join ', ')
+            $message = 'Disk health not confirmed: {0} ({1})' -f (Format-WcdDiskSummary -Disks $warning), (@($warning | ForEach-Object { [string]$_.HealthStatus }) -join ', ')
             Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: {0}' -f $message)
             $results += [pscustomobject]@{
                 Step     = 'DiskHealth'
@@ -299,7 +283,7 @@ function Set-WcdDiskStatus {
                 Error    = $message
             }
         } else {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: every fixed disk reports Healthy ({0}).' -f (Format-WcdDiskName -Disks $disks))
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: every fixed disk reports Healthy ({0}).' -f (Format-WcdDiskSummary -Disks $disks))
             $results += [pscustomobject]@{
                 Step     = 'DiskHealth'
                 Success  = $true
@@ -318,7 +302,7 @@ function Set-WcdDiskStatus {
         }
     }
 
-    & $finishStep 'DiskHealth'
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DiskHealth' -Results $results
 
     # --- Free space on the system drive --------------------------------------
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DiskFreeSpace' -Event 'Start'
@@ -327,43 +311,30 @@ function Set-WcdDiskStatus {
 
     try {
         $volume = Get-WcdSystemVolume
-        $totalBytes = if ($null -eq $volume) { 0 } else { [double]$volume.Size }
+        $freeGB = [double]$volume.SizeRemaining / 1GB
+        $totalGB = [double]$volume.Size / 1GB
+        # Floored, never rounded: "20 GB free" printed beside "below the 20 GB
+        # threshold" reads as a bug. The comparison below is made on the raw
+        # figure, so 19.6 GB cannot pass a 20 GB threshold either way.
+        $detail = '{0:N0} GB free of {1:N0} GB' -f [math]::Floor($freeGB), [math]::Floor($totalGB)
 
-        if ($totalBytes -le 0) {
-            $message = 'The system drive reported no size, so its free space could not be checked.'
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: {0}' -f $message)
+        if ($freeGB -ge $minFreeGB) {
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: {0}, at or above the {1:N0} GB threshold.' -f $detail, $minFreeGB)
             $results += [pscustomobject]@{
                 Step     = 'DiskFreeSpace'
                 Success  = $true
-                Severity = 'WARNING'
-                Error    = $message
+                Severity = 'INFO'
+                Error    = $detail
             }
         } else {
-            $freeGB = [double]$volume.SizeRemaining / 1GB
-            $totalGB = $totalBytes / 1GB
-            # Rounded for the technician, compared raw: 19.6 GB must not pass a
-            # 20 GB threshold by rounding up.
-            $detail = '{0:N0} GB free of {1:N0} GB' -f $freeGB, $totalGB
-
-            if ($freeGB -ge $minFreeGB) {
-                Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: {0}, at or above the {1:N0} GB threshold.' -f $detail, $minFreeGB)
-                $results += [pscustomobject]@{
-                    Step     = 'DiskFreeSpace'
-                    Success  = $true
-                    Severity = 'INFO'
-                    Error    = $detail
-                }
-            } else {
-                $message = '{0}, below the {1:N0} GB threshold.' -f $detail, $minFreeGB
-                Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: {0}' -f $message)
-                $results += [pscustomobject]@{
-                    Step       = 'DiskFreeSpace'
-                    Success    = $true
-                    Severity   = 'WARNING'
-                    Error      = $message
-                    RemedyKey  = 'DiskLowFreeSpace'
-                    RemedyArgs = @()
-                }
+            $message = '{0}, below the {1:N0} GB threshold.' -f $detail, $minFreeGB
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Disk: {0}' -f $message)
+            $results += [pscustomobject]@{
+                Step      = 'DiskFreeSpace'
+                Success   = $true
+                Severity  = 'WARNING'
+                Error     = $message
+                RemedyKey = 'DiskLowFreeSpace'
             }
         }
     } catch {
@@ -377,7 +348,7 @@ function Set-WcdDiskStatus {
         }
     }
 
-    & $finishStep 'DiskFreeSpace'
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DiskFreeSpace' -Results $results
 
     return $results
 }

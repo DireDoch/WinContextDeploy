@@ -157,12 +157,15 @@ Describe 'Config-Disk' {
         It 'ne laisse pas l arrondi franchir le seuil' {
             $logPath = Join-Path $TestDrive 'log_space_rounding.txt'
 
-            # 19,6 Go s affiche "20 GB" mais reste sous un seuil de 20 Go.
+            # 19,6 Go reste sous un seuil de 20 Go, et le chiffre affiche est
+            # tronque et non arrondi: "20 GB free ... below the 20 GB threshold"
+            # se lirait comme un bogue.
             Mock -CommandName 'Get-WcdSystemVolume' { New-TestVolume -FreeGB 19.6 -TotalGB 256 }
 
             $space = @(Set-WcdDiskStatus -LogPath $logPath | Where-Object { $_.Step -eq 'DiskFreeSpace' })[0]
 
             $space.Severity | Should -Be 'WARNING'
+            $space.Error | Should -Be '19 GB free of 256 GB, below the 20 GB threshold.'
         }
 
         It 'retourne erreur si Get-Volume echoue' {

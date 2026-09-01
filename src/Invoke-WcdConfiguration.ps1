@@ -151,7 +151,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Helpdesk       = 'Helpdesk portal'
             Favorites      = 'Browser favorites'
             Network        = 'Network adapters'
-            Disk           = 'Disk'
+            DiskHealth     = 'Disk health'
+            DiskFreeSpace  = 'Free space'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -279,7 +280,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Helpdesk       = 'Portail de soutien'
             Favorites      = 'Favoris du navigateur'
             Network        = 'Adaptateurs reseau'
-            Disk           = 'Disque'
+            DiskHealth     = 'Sante du disque'
+            DiskFreeSpace  = 'Espace libre'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -1480,8 +1482,10 @@ function Get-WcdFinalChecklistEntries {
         -StepKeys $powerStepKeys -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup `
         -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Disk -ResultLookup $lookup `
-        -StepKeys @('DiskHealth', 'DiskFreeSpace') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DiskHealth -ResultLookup $lookup `
+        -StepKeys @('DiskHealth') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DiskFreeSpace -ResultLookup $lookup `
+        -StepKeys @('DiskFreeSpace') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Network -ResultLookup $lookup `
         -StepKeys @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') -StepLabels $StepLabels
 

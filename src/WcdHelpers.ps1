@@ -845,6 +845,62 @@ function Invoke-WcdProgressCallback {
     })
 }
 
+function Complete-WcdProgressStep {
+    <#
+    .SYNOPSIS
+        Raises a Step's Finish progress event with the kind its Result earned.
+
+    .DESCRIPTION
+        Decides the progress kind from the Result the Module just recorded, in
+        one place, so a Module with a dozen branches never repeats the mapping.
+        A Step that recorded no Result at all counts as a success: the Module
+        chose not to report it, which is not a failure.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked for progress display. Omit for no display.
+
+    .PARAMETER ModuleName
+        The Module raising the event.
+
+    .PARAMETER StepKey
+        The Step that just finished.
+
+    .PARAMETER Results
+        Every Result recorded so far. The last one carrying StepKey decides the
+        kind.
+
+    .OUTPUTS
+        None. Raises a progress event.
+
+    .EXAMPLE
+        Complete-WcdProgressStep -ProgressCallback $callback -ModuleName 'Config-Disk' `
+            -StepKey 'DiskHealth' -Results $results
+    #>
+    [CmdletBinding()]
+    param(
+        [scriptblock]$ProgressCallback,
+
+        [Parameter(Mandatory)]
+        [string]$ModuleName,
+
+        [Parameter(Mandatory)]
+        [string]$StepKey,
+
+        [object[]]$Results = @()
+    )
+
+    $last = @($Results | Where-Object { $_.Step -eq $StepKey }) | Select-Object -Last 1
+    $kind = if ($null -eq $last) { 'success' } else {
+        switch (Get-WcdResultSeverity -Result $last) {
+            'ERROR'   { 'error' }
+            'WARNING' { 'warning' }
+            default   { 'success' }
+        }
+    }
+
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $ModuleName -StepKey $StepKey -Event 'Finish' -Kind $kind
+}
+
 function Get-WcdHistoryBlock {
     <#
     .SYNOPSIS

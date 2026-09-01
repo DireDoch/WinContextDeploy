@@ -441,22 +441,6 @@ function Set-WcdNetworkDiagnostics {
         $pingTarget = [string]$Config.Network.PingTarget
     }
 
-    # One place that decides the progress kind from the Result just recorded,
-    # so the ten branches below never have to repeat it.
-    $finishStep = {
-        param([string]$StepKey)
-
-        $last = @($results | Where-Object { $_.Step -eq $StepKey }) | Select-Object -Last 1
-        $kind = if ($null -eq $last) { 'success' } else {
-            switch (Get-WcdResultSeverity -Result $last) {
-                'ERROR'   { 'error' }
-                'WARNING' { 'warning' }
-                default   { 'success' }
-            }
-        }
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $StepKey -Event 'Finish' -Kind $kind
-    }
-
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'NetworkAdapterStatus' -Event 'Start'
 
     try {
@@ -498,7 +482,7 @@ function Set-WcdNetworkDiagnostics {
         }
     }
 
-    & $finishStep 'NetworkAdapterStatus'
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'NetworkAdapterStatus' -Results $results
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'NetworkPing8888' -Event 'Start'
 
     if ($adapterInventoryUnavailable) {
@@ -595,7 +579,7 @@ function Set-WcdNetworkDiagnostics {
         }
     }
 
-    & $finishStep 'NetworkPing8888'
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'NetworkPing8888' -Results $results
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'RefreshNetworkPlaces' -Event 'Start'
 
     try {
@@ -630,7 +614,7 @@ function Set-WcdNetworkDiagnostics {
         }
     }
 
-    & $finishStep 'RefreshNetworkPlaces'
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'RefreshNetworkPlaces' -Results $results
 
     return $results
 }
