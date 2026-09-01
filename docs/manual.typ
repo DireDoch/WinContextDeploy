@@ -418,6 +418,7 @@ module, which is the view that tells you whether the run itself went well:
   cline("  [x]  Config-DeviceManager      OK        1 step(s)", fill: cGreen),
   cline("  [x]  Config-Disk               OK        2 step(s)", fill: cGreen),
   cline("  [x]  Config-BitLocker          OK        2 step(s)", fill: cGreen),
+  cline("  [x]  Config-WindowsUpdate      OK        2 step(s)", fill: cGreen),
   cline("  [x]  Config-Network            OK        3 step(s)", fill: cGreen),
 )
 
@@ -443,6 +444,8 @@ thing that had to happen on this machine:
   cline("  [x]  Free space               OK         412 GB free of 476 GB", fill: cGreen),
   cline("  [x]  TPM readiness            OK         TPM present and ready.", fill: cGreen),
   cline("  [x]  Drive encryption         OK         Protected: C: FullyEncrypted.", fill: cGreen),
+  cline("  [x]  Windows Update            OK         No failed update in the last 50", fill: cGreen),
+  cline("                                           entries (30 days).", fill: cGreen),
   cline("  [x]  Network adapters         OK", fill: cGreen),
   cline("  [x]  Software Center          OK", fill: cGreen),
   cline("  [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).", fill: cYellow),
@@ -483,6 +486,7 @@ Your answers change what each module *does*, never the order they run in.
       ("Config-DeviceManager", "devices Windows cannot configure"),
       ("Config-Disk", "disk health, free space on the system drive"),
       ("Config-BitLocker", "TPM readiness, encryption on the system drive"),
+      ("Config-WindowsUpdate", "failed updates, a restart waiting to be applied"),
       ("Config-Network", "adapters, connectivity, network places"),
       ("Config-Printer", "shared print queues"),
     )
@@ -508,7 +512,7 @@ Your answers change what each module *does*, never the order they run in.
       if i == 0 { arrow((0, -3.34), (0, y + 0.33)) } else { arrow((0, y + 0.85 - 0.33), (0, y + 0.33)) }
     }
 
-    let last = top - 10 * 0.85
+    let last = top - 11 * 0.85
     dnode((0, last - 1.0), text(size: 8pt)[Final diagnostic: by module, then by step], w: 8.4, h: 0.68)
     dnode((0, last - 2.0), text(size: 8pt)[Write the log, the history block and the JSON report], w: 8.4, h: 0.68)
     dnode((0, last - 3.0), text(size: 8.5pt, weight: "bold", fill: white)[End],
@@ -520,7 +524,7 @@ Your answers change what each module *does*, never the order they run in.
     // Brace over the module band
     d.line((5.2, top + 0.33), (5.5, top + 0.33), (5.5, last - 0.33), (5.2, last - 0.33),
       stroke: 0.8pt + grey)
-    dlabel((7.1, (top + last) / 2), align(left)[11 modules, \ run in \ this order], size: 8pt)
+    dlabel((7.1, (top + last) / 2), align(left)[12 modules, \ run in \ this order], size: 8pt)
   })
 ]
 #v(0.2cm)
@@ -752,6 +756,46 @@ to say.
   cmdlet rather than parsing the edition string — a stripped Professional image
   behaves the same way and would fool the string — and reports one row saying the
   edition does not support BitLocker, rather than crashing.
+]
+
+=== Config-WindowsUpdate — failed updates and a pending restart
+
+A machine that failed an update during imaging, or that is sitting on an
+unapplied reboot, looks completely fine at handover and is not. Neither shows up
+anywhere else in the run.
+
+Two steps, both reading state that is already on the machine. `Windows Update
+history` reads the local update history through the Windows Update Agent and
+warns about any recent entry that did not succeed, naming the update — the KB
+number is part of the title Windows records — and its `HRESULT`. `Restart
+pending` reads the `RebootRequired` key: absent passes, present warns.
+
+Only recent history counts: the last 50 entries, and only the last 30 days. A
+machine re-imaged over an older install carries history that has nothing to do
+with this deployment, and warning about it would be noise a technician learns to
+ignore.
+
+#note[
+  A restart is asked for *once*. If the machine was also renamed or joined to a
+  domain, the same restart covers both, and the `Restart required` row says so
+  rather than reading as though two were needed.
+]
+
+#warn[
+  "Are updates pending" is deliberately not checked. That search asks Microsoft
+  over the network, takes anywhere from 30 seconds to several minutes in a tool
+  whose whole value is being fast, and can hang. Worse, a freshly imaged machine
+  *always* has updates pending, because the image is weeks old — the step would
+  warn on 100% of runs, which is exactly the alarm technicians learn to scroll
+  past. "An update tried and failed" is the actionable signal; "updates exist" is
+  not.
+]
+
+#note[
+  The Windows Update Agent is absent or disabled on some managed and stripped
+  images. Creating the COM object is wrapped: that reports one note saying the
+  history could not be read, rather than crashing the module. Neither step needs
+  Administrator.
 ]
 
 === Config-Network — adapters, connectivity and network places

@@ -569,6 +569,8 @@ function Get-WcdTechnicalStepLabels {
         'BitLockerStatus'        = 'Drive encryption'
         'ComputerName'           = 'Computer name'
         'DomainJoin'             = 'Domain join'
+        'WindowsUpdateHistory'   = 'Windows Update history'
+        'WindowsUpdateReboot'    = 'Restart pending'
         'NetworkAdapterStatus'   = 'Network adapters'
         'NetworkPing8888'        = 'Connectivity test'
         'RefreshNetworkPlaces'   = 'Refresh network places'
@@ -667,6 +669,7 @@ function Get-WcdModuleProgressPlan {
         'Config-DeviceManager' = @('DeviceManagerStatus')
         'Config-Disk' = @('DiskHealth', 'DiskFreeSpace')
         'Config-BitLocker' = @('TpmReadiness', 'BitLockerStatus')
+        'Config-WindowsUpdate' = @('WindowsUpdateHistory', 'WindowsUpdateReboot')
         'Config-Network' = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
         'Config-Printer' = $printerSteps
     }
