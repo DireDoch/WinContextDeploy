@@ -110,6 +110,8 @@ the manifest key to edit — when something needs one.
   [x]  Device Manager           OK
   [x]  Disk health              OK
   [x]  Free space               OK         412 GB free of 476 GB
+  [x]  TPM readiness            OK         TPM present and ready.
+  [x]  Drive encryption         OK         Protected: C: FullyEncrypted.
   [x]  Network adapters         OK
   [x]  Outlook                  OK
   [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).
@@ -122,7 +124,7 @@ the manifest key to edit — when something needs one.
   [-]  Mail signature           MANUAL     Must be done manually.
   [-]  Wi-Fi                    MANUAL     Must be done manually.
 
-Summary: 8 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.
+Summary: 10 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.
 ```
 
 `OK`, `WARNING` and `ERROR` are green, yellow and red in the console. `MANUAL`
@@ -132,10 +134,10 @@ rather than a problem.
 ## Requirements
 
 - Windows 10/11, PowerShell 5.1 or later
-- Administrator rights for the power-plan steps. The tool offers the UAC prompt
-  itself; declining is fine, and those steps then report as needing elevation
-  instead of failing. `-NonInteractive` never prompts — start the process
-  elevated if an unattended run has to apply them.
+- Administrator rights for the power-plan steps and the BitLocker / TPM check.
+  The tool offers the UAC prompt itself; declining is fine, and those steps then
+  report as needing elevation instead of failing. `-NonInteractive` never
+  prompts — start the process elevated if an unattended run has to apply them.
 - [Pester](https://pester.dev/) 5.x, only if you want to run the tests
 
 ## Usage
@@ -248,6 +250,13 @@ number lives in the manifest.
 Disk *health* is not configurable — a drive reporting `Unhealthy` is an error
 everywhere. Removable disks are left out of that check, so a USB key in the port
 never affects the result.
+
+Neither is *drive encryption*: an unprotected system drive is always a warning,
+with no manifest knob to silence it — and so is one still encrypting, since
+Windows reports a drive as protected long before it has finished. A fleet that applies BitLocker by policy
+after enrolment will see the warning on a fresh machine, which is the correct
+thing for a handover checklist to say. The tool only ever reports — it never
+enables BitLocker and never touches a recovery key.
 
 ## Branding
 

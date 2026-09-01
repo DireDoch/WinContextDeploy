@@ -139,8 +139,9 @@ function Test-WcdElevated {
         Reports whether the current process holds Administrator rights.
 
     .DESCRIPTION
-        Only the power steps need elevation. A run without it still completes;
-        those steps report as actionable warnings instead of failures.
+        The power steps and the encryption check need elevation. A run without
+        it still completes; those steps report as actionable warnings instead of
+        failures.
         Returns $false on any platform where the Windows principal cannot be
         read, which is the safe answer: nothing is attempted that needs admin.
 
@@ -335,6 +336,31 @@ function Get-WcdResultSeverity {
     return 'INFO'
 }
 
+function Get-WcdSystemDriveLetter {
+    <#
+    .SYNOPSIS
+        Returns the drive letter the running Windows sits on.
+
+    .DESCRIPTION
+        Reads %SystemDrive% rather than assuming C:, and falls back to C when
+        the variable is empty. Shared by every Module that has to name the
+        system drive, so they cannot disagree about which drive that is.
+
+    .OUTPUTS
+        [string] The bare letter, without a colon.
+
+    .EXAMPLE
+        Get-WcdSystemDriveLetter   # C
+    #>
+    [CmdletBinding()]
+    param()
+
+    $driveLetter = ([string]$env:SystemDrive).TrimEnd(':')
+    if ([string]::IsNullOrWhiteSpace($driveLetter)) { return 'C' }
+
+    return $driveLetter
+}
+
 function Get-WcdPrinterStepKey {
     <#
     .SYNOPSIS
@@ -408,6 +434,8 @@ function Get-WcdTechnicalStepLabels {
         'DeviceManagerStatus'    = 'Device Manager'
         'DiskHealth'             = 'Disk health'
         'DiskFreeSpace'          = 'Free space'
+        'TpmReadiness'           = 'TPM readiness'
+        'BitLockerStatus'        = 'Drive encryption'
         'NetworkAdapterStatus'   = 'Network adapters'
         'NetworkPing8888'        = 'Connectivity test'
         'RefreshNetworkPlaces'   = 'Refresh network places'
@@ -498,6 +526,7 @@ function Get-WcdModuleProgressPlan {
         'Config-Applications' = $applicationSteps
         'Config-DeviceManager' = @('DeviceManagerStatus')
         'Config-Disk' = @('DiskHealth', 'DiskFreeSpace')
+        'Config-BitLocker' = @('TpmReadiness', 'BitLockerStatus')
         'Config-Network' = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
         'Config-Printer' = $printerSteps
     }

@@ -137,9 +137,9 @@ function Get-WcdSystemVolume {
         Returns the volume the running Windows sits on.
 
     .DESCRIPTION
-        Reads the drive letter from %SystemDrive% rather than assuming C:, and
-        falls back to C when the variable is empty. Thin wrapper over Get-Volume,
-        so the tests have a seam to mock.
+        Reads the drive letter through Get-WcdSystemDriveLetter rather than
+        assuming C:. Thin wrapper over Get-Volume, so the tests have a seam to
+        mock.
 
     .OUTPUTS
         The system volume. Throws when Get-Volume is unavailable or the drive
@@ -156,10 +156,7 @@ function Get-WcdSystemVolume {
         throw 'Get-Volume is unavailable in this session.'
     }
 
-    $driveLetter = ([string]$env:SystemDrive).TrimEnd(':')
-    if ([string]::IsNullOrWhiteSpace($driveLetter)) { $driveLetter = 'C' }
-
-    return (Get-Volume -DriveLetter $driveLetter -ErrorAction Stop)
+    return (Get-Volume -DriveLetter (Get-WcdSystemDriveLetter) -ErrorAction Stop)
 }
 
 function Get-WcdMinimumFreeGB {

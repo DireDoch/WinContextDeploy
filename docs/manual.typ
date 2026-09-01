@@ -257,8 +257,8 @@ one, it follows the system locale.
   [*Windows*], [Windows 10 or 11.],
   [*PowerShell*], [5.1 or later. Windows ships with it; nothing to install.],
   [*Administrator*],
-  [Only the power settings need it. The tool offers the UAC prompt itself and
-   carries on perfectly well if you decline.],
+  [Only the power settings and the BitLocker / TPM check need it. The tool offers
+   the UAC prompt itself and carries on perfectly well if you decline.],
   [*The manifest*],
   [Open `WinContextDeploy.psd1` and point it at the applications, printers and
    URLs of *your* environment. The shipped entries are generic examples.],
@@ -383,6 +383,7 @@ module, which is the view that tells you whether the run itself went well:
   cline("  [!]  Config-Applications       WARNING   9 step(s)  Warnings: AppVpn", fill: cYellow),
   cline("  [x]  Config-DeviceManager      OK        1 step(s)", fill: cGreen),
   cline("  [x]  Config-Disk               OK        2 step(s)", fill: cGreen),
+  cline("  [x]  Config-BitLocker          OK        2 step(s)", fill: cGreen),
   cline("  [x]  Config-Network            OK        3 step(s)", fill: cGreen),
 )
 
@@ -401,6 +402,8 @@ thing that had to happen on this machine:
   cline("  [x]  Device Manager           OK", fill: cGreen),
   cline("  [x]  Disk health              OK", fill: cGreen),
   cline("  [x]  Free space               OK         412 GB free of 476 GB", fill: cGreen),
+  cline("  [x]  TPM readiness            OK         TPM present and ready.", fill: cGreen),
+  cline("  [x]  Drive encryption         OK         Protected: C: FullyEncrypted.", fill: cGreen),
   cline("  [x]  Network adapters         OK", fill: cGreen),
   cline("  [x]  Software Center          OK", fill: cGreen),
   cline("  [!]  VPN client               WARNING    No matching process running (PanGPA, PanGPS).", fill: cYellow),
@@ -414,7 +417,7 @@ thing that had to happen on this machine:
   cline("  [-]  Wi-Fi                    MANUAL     Must be done manually.", fill: cDim),
   cline("  [-]  Network drives           MANUAL     Must be done manually.", fill: cDim),
   cline(""),
-  cline("Summary: 8 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.", fill: cYellow),
+  cline("Summary: 10 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.", fill: cYellow),
 )
 
 The arrow lines are the point of the whole report. A failure that only says
@@ -439,6 +442,7 @@ Your answers change what each module *does*, never the order they run in.
       ("Config-Applications", "verify and open the targets"),
       ("Config-DeviceManager", "devices Windows cannot configure"),
       ("Config-Disk", "disk health, free space on the system drive"),
+      ("Config-BitLocker", "TPM readiness, encryption on the system drive"),
       ("Config-Network", "adapters, connectivity, network places"),
       ("Config-Printer", "shared print queues"),
     )
@@ -464,7 +468,7 @@ Your answers change what each module *does*, never the order they run in.
       if i == 0 { arrow((0, -3.34), (0, y + 0.33)) } else { arrow((0, y + 0.85 - 0.33), (0, y + 0.33)) }
     }
 
-    let last = top - 8 * 0.85
+    let last = top - 9 * 0.85
     dnode((0, last - 1.0), text(size: 8pt)[Final diagnostic: by module, then by step], w: 8.4, h: 0.68)
     dnode((0, last - 2.0), text(size: 8pt)[Write the log, the history block and the JSON report], w: 8.4, h: 0.68)
     dnode((0, last - 3.0), text(size: 8.5pt, weight: "bold", fill: white)[End],
@@ -476,7 +480,7 @@ Your answers change what each module *does*, never the order they run in.
     // Brace over the module band
     d.line((5.2, top + 0.33), (5.5, top + 0.33), (5.5, last - 0.33), (5.2, last - 0.33),
       stroke: 0.8pt + grey)
-    dlabel((7.1, (top + last) / 2), align(left)[9 modules, \ run in \ this order], size: 8pt)
+    dlabel((7.1, (top + last) / 2), align(left)[10 modules, \ run in \ this order], size: 8pt)
   })
 ]
 #v(0.2cm)
@@ -495,8 +499,8 @@ Sets the screen timeout to 10 minutes on battery and 15 on AC, makes closing the
 lid do nothing, and applies the active power scheme. On a `Desktop` the battery
 and lid steps do not apply.
 
-This is the *only* module that needs Administrator. Without it, the module
-attempts nothing and every step reports:
+One of the two modules that need Administrator — `Config-BitLocker` is the other.
+Without it, the module attempts nothing and every step reports:
 
 #console(
   cline("  [!]  Power options            WARNING    Screen timeout on AC: powercfg requires", fill: cYellow),
@@ -600,6 +604,50 @@ system drive only, for the same reason.
   deliberately not read. They are genuinely useful on refurbished machines, but
   they need Administrator and return nothing on plenty of consumer SATA and NVMe
   drives, so the step would silently report nothing on a large slice of any fleet.
+]
+
+=== Config-BitLocker — TPM readiness and drive encryption
+
+Handing over an unencrypted laptop is the kind of mistake that is invisible on
+the day and expensive later. This module reports whether the system drive is
+protected and whether the TPM is in a state that would let it be.
+
+Two steps. `TPM readiness` reads `Get-Tpm`: present and ready passes, anything
+else is a warning pointing at the firmware setting. `Drive encryption` reads
+`Get-BitLockerVolume` on the system drive: fully encrypted and protected passes,
+anything else warns.
+
+An unprotected system drive is *always* a warning, and there is no manifest knob
+to silence it. A fleet that applies encryption by policy after enrolment will see
+the warning on a fresh machine, and that is the correct thing for the checklist
+to say.
+
+#note[
+  A drive still encrypting warns rather than passes, and the row names the
+  percentage. Windows flips `ProtectionStatus` to `On` as soon as the protectors
+  exist — long before the drive is actually encrypted — so a step keyed on that
+  alone would print a green `OK` for a machine sitting at 47%. A machine handed
+  over half encrypted is not a protected machine.
+]
+
+#warn[
+  This module reports and nothing else. It never enables BitLocker and never
+  reads or stores a recovery key. Turning encryption on is a security decision
+  with a real lockout risk behind it, not a verification, and it belongs to
+  whoever owns the fleet policy — not to a post-image checklist.
+]
+
+#note[
+  Both cmdlets need Administrator, so an unelevated run reports both steps as
+  needing elevation, exactly the way the power steps do. That is why this is not
+  part of `Config-Disk`: disk health needs no elevation and works on every
+  edition, so it keeps reporting normally on a non-elevated run instead of being
+  dragged into a half-elevated module.
+
+  Windows Home ships without the BitLocker module at all. The step probes for the
+  cmdlet rather than parsing the edition string — a stripped Professional image
+  behaves the same way and would fool the string — and reports one row saying the
+  edition does not support BitLocker, rather than crashing.
 ]
 
 === Config-Network — adapters, connectivity and network places
@@ -726,7 +774,7 @@ buildings inside.
 
     cont((0, 0), [WinContextDeploy.cmd], [Launcher])
     cont((5, 0), [Invoke-WcdConfiguration.ps1], [Orchestrator])
-    cont((10, 0), [Config-\*.ps1], [The 9 modules], fill: rgb("#eaf5ea"), stroke: okGreen)
+    cont((10, 0), [Config-\*.ps1], [The 10 modules], fill: rgb("#eaf5ea"), stroke: okGreen)
     cont((10, -2.6), [WinContextDeploy.psd1], [The manifest], fill: warnBox, stroke: warnOrange)
     cont((5, -2.6), [WcdHelpers.ps1], [Shared functions])
     cont((0, -2.6), [log.txt / report.json], [Output], fill: greyLight, stroke: grey)
@@ -833,7 +881,7 @@ This is one run, in the order things actually happen.
 
     d.rect((4.4, -7.0), (12.6, -7.6), radius: 0.08,
       stroke: (paint: grey, dash: "dashed", thickness: 0.7pt))
-    dlabel((8.5, -7.3), [repeated once per module, eight times], size: 7.5pt)
+    dlabel((8.5, -7.3), [repeated once per module, ten times], size: 7.5pt)
 
     msg(-8.1, 5.8, 0, [print the final diagnostic], dashed: true)
     msg(-8.7, 5.8, 13.7, [history block + JSON report])
@@ -1043,7 +1091,7 @@ function Set-WcdDecimalConfiguration {
 ```
 
 #tip[
-  Understand this module and you understand all eight. `Config-Power` has six
+  Understand this module and you understand all ten. `Config-Power` has six
   steps instead of one and `Config-Language` calls different cmdlets, but the
   shape never changes.
 ]
@@ -1182,7 +1230,8 @@ function Set-WcdMyThingConfiguration {
 
 #tip[
   The template raises its own `Finish` event because it has one step. A module
-  with several — `Config-Disk` and `Config-Network` both have — should call
+  with several — `Config-Disk`, `Config-BitLocker` and `Config-Network` all
+  have — should call
   `Complete-WcdProgressStep` instead: it reads the Result your module just
   recorded and picks the right progress kind, so a dozen branches never repeat
   the mapping.
@@ -1391,7 +1440,12 @@ Each log line is a timestamp, a level, and a message:
   [Every power step says it needs Administrator],
   [You declined the UAC prompt, or the account has no rights to give],
   [Nothing is broken — everything else applied. Relaunch elevated to finish the
-   power settings, or accept them as they are.],
+   power settings and read the encryption status, or accept them as they are.],
+
+  [`This edition does not support BitLocker`],
+  [Windows Home, or an image with the BitLocker module stripped out],
+  [Not a fault of the tool. Confirm the machine is meant to ship on that edition,
+   or reimage with one that supports encryption.],
 
   [`Registry key locked by GPO` in the log],
   [Group Policy owns that setting],

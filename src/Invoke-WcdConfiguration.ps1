@@ -153,6 +153,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Network        = 'Network adapters'
             DiskHealth     = 'Disk health'
             DiskFreeSpace  = 'Free space'
+            Tpm            = 'TPM readiness'
+            BitLocker      = 'Drive encryption'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -231,8 +233,8 @@ $T = if ($ScriptUI -eq 'EN') {
         DiagFinalByModule       = '         FINAL DIAGNOSTIC - BY MODULE         '
         DiagFinalByStep         = '         FINAL DIAGNOSTIC - BY STEP           '
         LogEndSummary           = '=== Execution complete: {0} OK, {1} warning(s), {2} error(s), {3} manual, {4} N/A ==='
-        ElevationRequest        = 'The power settings need Administrator. Requesting elevation...'
-        ElevationDeclined       = 'Continuing without Administrator. The power steps will report as needing elevation.'
+        ElevationRequest        = 'The power settings and the encryption check need Administrator. Requesting elevation...'
+        ElevationDeclined       = 'Continuing without Administrator. The power and encryption steps will report as needing elevation.'
         ElevationUncWarning     = '[WARNING] -HistoryLogPath points at a network share ({0}). Elevation opens a new logon session, which drops mapped drives, so the history export may fail after the relaunch.'
         ReportWritten           = 'JSON report written to: {0}'
         ReportFailed            = '[WARNING] JSON report could not be written to {0}. Detail: {1}'
@@ -250,6 +252,10 @@ $T = if ($ScriptUI -eq 'EN') {
             PrinterUnreachable  = "Print server {0} is unreachable. Check the connection, or remove Printers['{1}'] from WinContextDeploy.psd1."
             DiskUnhealthy       = 'Replace {0} before handover.'
             DiskLowFreeSpace    = 'Free up space before handover, or raise Disk.MinFreeGB in WinContextDeploy.psd1 if that threshold is wrong for this fleet.'
+            TpmNotReady         = 'Enable the TPM (PTT or fTPM) in the firmware. A TPM that is present but not ready usually needs clearing or initialising from tpm.msc.'
+            BitLockerOff        = 'Enable BitLocker on the system drive before handover, or confirm the fleet policy applies it after enrolment.'
+            BitLockerInProgress = 'Encryption is still running. Let it finish before handover; the drive is not protected until it does.'
+            BitLockerUnavailable = 'This edition does not support BitLocker. Confirm the machine should ship on it, or reimage with an edition that does.'
         }
     }
 } else {
@@ -282,6 +288,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Network        = 'Adaptateurs reseau'
             DiskHealth     = 'Sante du disque'
             DiskFreeSpace  = 'Espace libre'
+            Tpm            = 'Etat du TPM'
+            BitLocker      = 'Chiffrement du disque'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -360,8 +368,8 @@ $T = if ($ScriptUI -eq 'EN') {
         DiagFinalByModule       = '         DIAGNOSTIC FINAL - PAR MODULE         '
         DiagFinalByStep         = '         DIAGNOSTIC FINAL - PAR ETAPE          '
         LogEndSummary           = '=== Fin execution: {0} OK, {1} warning(s), {2} erreur(s), {3} manuel(le)(s), {4} N/A ==='
-        ElevationRequest        = 'Les options d alimentation exigent les droits Administrateur. Demande d elevation...'
-        ElevationDeclined       = 'Poursuite sans droits Administrateur. Les etapes d alimentation seront signalees comme exigeant une elevation.'
+        ElevationRequest        = 'Les options d alimentation et la verification du chiffrement exigent les droits Administrateur. Demande d elevation...'
+        ElevationDeclined       = 'Poursuite sans droits Administrateur. Les etapes d alimentation et de chiffrement seront signalees comme exigeant une elevation.'
         ElevationUncWarning     = '[AVERTISSEMENT] -HistoryLogPath pointe vers un partage reseau ({0}). L elevation ouvre une nouvelle session d ouverture, qui perd les lecteurs mappes: l export historique peut echouer apres le relancement.'
         ReportWritten           = 'Rapport JSON ecrit dans: {0}'
         ReportFailed            = '[AVERTISSEMENT] Rapport JSON impossible a ecrire dans {0}. Detail: {1}'
@@ -379,6 +387,10 @@ $T = if ($ScriptUI -eq 'EN') {
             PrinterUnreachable  = "Serveur d impression {0} injoignable. Verifier la connexion, ou retirer Printers['{1}'] de WinContextDeploy.psd1."
             DiskUnhealthy       = 'Remplacer {0} avant la remise du poste.'
             DiskLowFreeSpace    = 'Liberer de l espace avant la remise du poste, ou augmenter Disk.MinFreeGB dans WinContextDeploy.psd1 si ce seuil ne convient pas au parc.'
+            TpmNotReady         = 'Activer le TPM (PTT ou fTPM) dans le micrologiciel. Un TPM present mais pas pret doit generalement etre efface ou initialise depuis tpm.msc.'
+            BitLockerOff        = 'Activer BitLocker sur le disque systeme avant la remise du poste, ou confirmer que la politique du parc l applique apres l inscription.'
+            BitLockerInProgress = 'Le chiffrement est encore en cours. Le laisser terminer avant la remise du poste: le disque n est pas protege tant qu il ne l est pas.'
+            BitLockerUnavailable = 'Cette edition ne prend pas en charge BitLocker. Confirmer que le poste doit etre remis avec cette edition, ou reimager avec une edition qui la prend en charge.'
         }
     }
 }
@@ -1486,6 +1498,10 @@ function Get-WcdFinalChecklistEntries {
         -StepKeys @('DiskHealth') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DiskFreeSpace -ResultLookup $lookup `
         -StepKeys @('DiskFreeSpace') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Tpm -ResultLookup $lookup `
+        -StepKeys @('TpmReadiness') -StepLabels $StepLabels
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.BitLocker -ResultLookup $lookup `
+        -StepKeys @('BitLockerStatus') -StepLabels $StepLabels
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Network -ResultLookup $lookup `
         -StepKeys @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') -StepLabels $StepLabels
 
@@ -1611,6 +1627,7 @@ $modules = @(
     @{ Name = 'Config-Applications';  File = 'Config-Applications.ps1' },
     @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' },
     @{ Name = 'Config-Disk';          File = 'Config-Disk.ps1' },
+    @{ Name = 'Config-BitLocker';     File = 'Config-BitLocker.ps1' },
     @{ Name = 'Config-Network';       File = 'Config-Network.ps1' },
     @{ Name = 'Config-Printer';       File = 'Config-Printer.ps1' }
 )
@@ -1701,6 +1718,9 @@ foreach ($mod in $modules) {
             }
             'Config-Disk' {
                 $modResults = @(Set-WcdDiskStatus -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+            }
+            'Config-BitLocker' {
+                $modResults = @(Set-WcdBitLockerStatus -Elevated $isElevated -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
             'Config-Network' {
                 $modResults = @(Set-WcdNetworkDiagnostics -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)

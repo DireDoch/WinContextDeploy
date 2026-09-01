@@ -70,9 +70,9 @@ URLs, printers. Editing it must never require editing a Module.
 _Avoid_: config, settings, paths file
 
 **Elevated**:
-Whether the run holds Administrator rights. Only power settings require them; a
-non-elevated run still completes, reporting the power Steps as needing elevation
-rather than as failures.
+Whether the run holds Administrator rights. Power settings and the BitLocker and
+TPM checks require them; a non-elevated run still completes, reporting those
+Steps as needing elevation rather than as failures.
 _Avoid_: admin, privileged, root
 
 ## Resolved ambiguities
