@@ -209,4 +209,30 @@
     Disk = @{
         MinFreeGB = 20
     }
+
+    # =========================================================================
+    # DOMAIN
+    # =========================================================================
+    # The domain the machine identity prompt offers to join, and the optional
+    # organisational unit the machine account is created in.
+    #
+    #   Name    The domain to join, e.g. 'corp.example.com'. Leave it empty and
+    #           the domain option disappears from the prompt entirely, the same
+    #           way an empty Printers array skips that Module.
+    #   OUPath  Optional. Omit it and the domain's own default container is used.
+    #
+    #   Domain = @{
+    #       Name   = 'corp.example.com'
+    #       OUPath = 'OU=Workstations,DC=corp,DC=example,DC=com'
+    #   }
+    #
+    # NEVER put a join account here. This file is committed, shared, and lives
+    # on a USB key; a plaintext domain account in it is a domain-wide problem,
+    # not a local one. The technician types their own account into the standard
+    # Windows credential dialog at the moment of joining.
+    # =========================================================================
+    Domain = @{
+        Name   = ''
+        OUPath = ''
+    }
 }

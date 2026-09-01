@@ -188,8 +188,8 @@ machine. Twenty minutes is not the problem. The problem is that the twentieth
 machine of the week gets a slightly different treatment from the first, and
 nobody can say afterwards which settings were actually applied.
 
-WinContextDeploy is the answer to that: a technician runs it once, answers four
-or five questions, and it applies the settings that depend on the machine's
+WinContextDeploy is the answer to that: a technician runs it once, answers five
+or six questions, and it applies the settings that depend on the machine's
 context, opens the applications that need to be checked by eye, and prints a
 checklist of what was done, what was skipped, and what still has to be done by
 hand.
@@ -257,8 +257,9 @@ one, it follows the system locale.
   [*Windows*], [Windows 10 or 11.],
   [*PowerShell*], [5.1 or later. Windows ships with it; nothing to install.],
   [*Administrator*],
-  [Only the power settings and the BitLocker / TPM check need it. The tool offers
-   the UAC prompt itself and carries on perfectly well if you decline.],
+  [Only the power settings, the BitLocker / TPM check and a domain join need it.
+   The tool offers the UAC prompt itself and carries on perfectly well if you
+   decline.],
   [*The manifest*],
   [Open `WinContextDeploy.psd1` and point it at the applications, printers and
    URLs of *your* environment. The shipped entries are generic examples.],
@@ -349,6 +350,38 @@ Answer *No* if you have already opened everything by hand. The applications then
 appear on the checklist as manual steps rather than silently disappearing from
 it.
 
+=== Machine identity
+
+#console(
+  cline("Machine identity", fill: cBlue),
+  cline("  Serial: 5CG2141ABC   (read-only, from firmware)", fill: cDim),
+  cline("  Change the computer name, or join the domain?", fill: cDim),
+  cline("  Neither is applied until the machine restarts.", fill: cDim),
+  cline("  Domain: corp.example.com", fill: cDim),
+  [#csel(" N: Neither ") #cline("  C: Computer name   D: Domain   B: Both", fill: cDim)],
+)
+
+The serial is *displayed, never changed* — it is stamped into SMBIOS at the
+factory and no supported Windows API writes it. It is shown because it is what
+you read off the chassis label when deciding the name.
+
+Answering `C` or `B` then asks for the name as free text. It is checked as you
+type it — 1 to 15 characters, no spaces or punctuation, not all digits, and not
+the name the machine already has — and a rejected name is re-asked immediately
+rather than failing at the end of the run.
+
+#note[
+  The domain options only appear when the manifest declares a `Domain.Name`.
+  With none, the question is just the computer name.
+]
+
+#warn[
+  *The tool never restarts the machine.* A reboot mid-run would destroy the
+  checklist, the history log and the JSON report — which are the entire point of
+  it. Neither the new name nor the domain membership takes effect until you
+  restart, and the checklist carries a `Restart required` row to say so.
+]
+
 === Engineering workstation
 
 #console(
@@ -376,6 +409,7 @@ module, which is the view that tells you whether the run itself went well:
   cline("==============================================="),
   cline("         FINAL DIAGNOSTIC - BY MODULE"),
   cline("==============================================="),
+  cline("  [x]  Config-Identity           OK        1 step(s)", fill: cGreen),
   cline("  [x]  Config-Power              OK        5 step(s)", fill: cGreen),
   cline("  [x]  Config-Decimal            OK        1 step(s)", fill: cGreen),
   cline("  [x]  Config-TaskbarLeft        OK        2 step(s)", fill: cGreen),
@@ -394,6 +428,11 @@ thing that had to happen on this machine:
   cline("==============================================="),
   cline("         FINAL DIAGNOSTIC - BY STEP"),
   cline("==============================================="),
+  cline("  [x]  Computer name           OK         Renamed to POSTE-01. Takes effect after", fill: cGreen),
+  cline("                                           a restart.", fill: cGreen),
+  cline("  [-]  Domain membership       MANUAL     Not requested this run.", fill: cDim),
+  cline("  [-]  Restart required        MANUAL     New computer name / domain membership", fill: cDim),
+  cline("                                           takes effect after a restart.", fill: cDim),
   cline("  [x]  Taskbar aligned left     OK", fill: cGreen),
   cline("  [x]  Display language         OK", fill: cGreen),
   cline("  [x]  Keyboard layout          OK", fill: cGreen),
@@ -417,7 +456,7 @@ thing that had to happen on this machine:
   cline("  [-]  Wi-Fi                    MANUAL     Must be done manually.", fill: cDim),
   cline("  [-]  Network drives           MANUAL     Must be done manually.", fill: cDim),
   cline(""),
-  cline("Summary: 10 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.", fill: cYellow),
+  cline("Summary: 11 OK, 1 warning(s), 1 error(s), 9 manual, 1 N/A.", fill: cYellow),
 )
 
 The arrow lines are the point of the whole report. A failure that only says
@@ -435,6 +474,7 @@ Your answers change what each module *does*, never the order they run in.
 #align(center)[
   #cetz.canvas({
     let modules = (
+      ("Config-Identity", "computer name, domain membership"),
       ("Config-Power", "power plan, lid, screen timeouts"),
       ("Config-Decimal", "decimal and currency separators"),
       ("Config-TaskbarLeft", "taskbar alignment, task view"),
@@ -468,7 +508,7 @@ Your answers change what each module *does*, never the order they run in.
       if i == 0 { arrow((0, -3.34), (0, y + 0.33)) } else { arrow((0, y + 0.85 - 0.33), (0, y + 0.33)) }
     }
 
-    let last = top - 9 * 0.85
+    let last = top - 10 * 0.85
     dnode((0, last - 1.0), text(size: 8pt)[Final diagnostic: by module, then by step], w: 8.4, h: 0.68)
     dnode((0, last - 2.0), text(size: 8pt)[Write the log, the history block and the JSON report], w: 8.4, h: 0.68)
     dnode((0, last - 3.0), text(size: 8.5pt, weight: "bold", fill: white)[End],
@@ -480,7 +520,7 @@ Your answers change what each module *does*, never the order they run in.
     // Brace over the module band
     d.line((5.2, top + 0.33), (5.5, top + 0.33), (5.5, last - 0.33), (5.2, last - 0.33),
       stroke: 0.8pt + grey)
-    dlabel((7.1, (top + last) / 2), align(left)[10 modules, \ run in \ this order], size: 8pt)
+    dlabel((7.1, (top + last) / 2), align(left)[11 modules, \ run in \ this order], size: 8pt)
   })
 ]
 #v(0.2cm)
@@ -493,14 +533,68 @@ Your answers change what each module *does*, never the order they run in.
 
 == What each module does
 
+=== Config-Identity — computer name and domain membership
+
+Naming the machine and joining it to the domain are the two steps whose omission
+is most obvious to the user and least obvious to the technician who has moved on.
+Both are driven from the machine-identity prompt, and both are skipped entirely
+when it is declined.
+
+Choosing *Both* is a single `Add-Computer -NewName` call rather than a rename
+followed by a join — one operation, one restart. The two Steps then report the
+outcome of that one call.
+
+The typed name is checked before any call is made, so a bad name is re-asked at
+the prompt instead of failing at the end of the run.
+
+#warn[
+  *No credential ever goes in the manifest, the log, the history log or the JSON
+  report.* The manifest holds only the domain name and OU path; the technician
+  types their own domain account into the standard Windows credential dialog at
+  the moment of joining, and it exists for the length of one call.
+
+  The manifest is committed, shared, and frequently lives on a USB key. A
+  plaintext join account in it is a domain-wide problem, not a local one.
+]
+
+#tip[
+  The domain lives in the manifest:
+
+  ```powershell
+  Domain = @{
+      Name   = 'corp.example.com'
+      OUPath = 'OU=Workstations,DC=corp,DC=example,DC=com'
+  }
+  ```
+
+  Leave `Name` empty and the domain option disappears from the prompt entirely,
+  the same way an empty `Printers` array skips that module. `OUPath` is optional;
+  omit it and the domain's own default container is used.
+]
+
+#note[
+  Both cmdlets need Administrator, so an unelevated run attempts neither and
+  opens no credential dialog: both Steps report as needing elevation, the same
+  way the power Steps do.
+
+  `Get-Credential` cannot run unattended, so `-NonInteractive` can never join a
+  domain. That is a documented limitation, not a bug. `-NewComputerName` and
+  `-JoinDomain` skip the question but not the credential dialog.
+
+  Declining, or running `-NonInteractive`, leaves both rows on the checklist as
+  Manual Steps rather than Not Applicable — a choice is not a filter, and a
+  fleet-wide JSON report can then show which machines are still unnamed.
+]
+
 === Config-Power — power plan, lid and screen timeouts
 
 Sets the screen timeout to 10 minutes on battery and 15 on AC, makes closing the
 lid do nothing, and applies the active power scheme. On a `Desktop` the battery
 and lid steps do not apply.
 
-One of the two modules that need Administrator — `Config-BitLocker` is the other.
-Without it, the module attempts nothing and every step reports:
+One of the modules that need Administrator — `Config-BitLocker` and a domain join
+in `Config-Identity` are the others. Without it, the module attempts nothing and
+every step reports:
 
 #console(
   cline("  [!]  Power options            WARNING    Screen timeout on AC: powercfg requires", fill: cYellow),
@@ -774,7 +868,7 @@ buildings inside.
 
     cont((0, 0), [WinContextDeploy.cmd], [Launcher])
     cont((5, 0), [Invoke-WcdConfiguration.ps1], [Orchestrator])
-    cont((10, 0), [Config-\*.ps1], [The 10 modules], fill: rgb("#eaf5ea"), stroke: okGreen)
+    cont((10, 0), [Config-\*.ps1], [The 11 modules], fill: rgb("#eaf5ea"), stroke: okGreen)
     cont((10, -2.6), [WinContextDeploy.psd1], [The manifest], fill: warnBox, stroke: warnOrange)
     cont((5, -2.6), [WcdHelpers.ps1], [Shared functions])
     cont((0, -2.6), [log.txt / report.json], [Output], fill: greyLight, stroke: grey)
@@ -881,7 +975,7 @@ This is one run, in the order things actually happen.
 
     d.rect((4.4, -7.0), (12.6, -7.6), radius: 0.08,
       stroke: (paint: grey, dash: "dashed", thickness: 0.7pt))
-    dlabel((8.5, -7.3), [repeated once per module, ten times], size: 7.5pt)
+    dlabel((8.5, -7.3), [repeated once per module, eleven times], size: 7.5pt)
 
     msg(-8.1, 5.8, 0, [print the final diagnostic], dashed: true)
     msg(-8.7, 5.8, 13.7, [history block + JSON report])
@@ -1091,7 +1185,7 @@ function Set-WcdDecimalConfiguration {
 ```
 
 #tip[
-  Understand this module and you understand all ten. `Config-Power` has six
+  Understand this module and you understand all eleven. `Config-Power` has six
   steps instead of one and `Config-Language` calls different cmdlets, but the
   shape never changes.
 ]
@@ -1441,6 +1535,11 @@ Each log line is a timestamp, a level, and a message:
   [You declined the UAC prompt, or the account has no rights to give],
   [Nothing is broken — everything else applied. Relaunch elevated to finish the
    power settings and read the encryption status, or accept them as they are.],
+
+  [The domain join failed, or the credential dialog was cancelled],
+  [Domain unreachable, the account cannot join machines, or a bad `OUPath`],
+  [Nothing else in the run is affected. Fix the cause and re-run with
+   `-JoinDomain`, or join the machine by hand — the checklist keeps the row.],
 
   [`This edition does not support BitLocker`],
   [Windows Home, or an image with the BitLocker module stripped out],

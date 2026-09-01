@@ -104,6 +104,11 @@ the manifest key to edit — when something needs one.
 ===============================================
          FINAL DIAGNOSTIC - BY STEP
 ===============================================
+  [x]  Computer name           OK         Renamed to POSTE-01. Takes effect after
+                                           a restart.
+  [-]  Domain membership       MANUAL     Not requested this run.
+  [-]  Restart required        MANUAL     New computer name / domain membership
+                                           takes effect after a restart.
   [x]  Taskbar aligned left     OK
   [x]  Display language         OK
   [x]  Power options            OK
@@ -124,7 +129,7 @@ the manifest key to edit — when something needs one.
   [-]  Mail signature           MANUAL     Must be done manually.
   [-]  Wi-Fi                    MANUAL     Must be done manually.
 
-Summary: 10 OK, 1 warning(s), 1 error(s), 7 manual, 1 N/A.
+Summary: 11 OK, 1 warning(s), 1 error(s), 9 manual, 1 N/A.
 ```
 
 `OK`, `WARNING` and `ERROR` are green, yellow and red in the console. `MANUAL`
@@ -134,7 +139,8 @@ rather than a problem.
 ## Requirements
 
 - Windows 10/11, PowerShell 5.1 or later
-- Administrator rights for the power-plan steps and the BitLocker / TPM check.
+- Administrator rights for the power-plan steps, the BitLocker / TPM check and a
+  domain join.
   The tool offers the UAC prompt itself; declining is fine, and those steps then
   report as needing elevation instead of failing. `-NonInteractive` never
   prompts — start the process elevated if an unattended run has to apply them.
@@ -258,6 +264,23 @@ after enrolment will see the warning on a fresh machine, which is the correct
 thing for a handover checklist to say. The tool only ever reports — it never
 enables BitLocker and never touches a recovery key.
 
+`Domain.Name` is the domain the machine-identity prompt offers to join, and
+`Domain.OUPath` the optional organisational unit the machine account is created
+in. Leave `Name` empty and the domain option disappears from the prompt entirely,
+the same way an empty `Printers` array skips that module.
+
+**Never put a join account in the manifest.** It holds the domain name and OU
+path and nothing else: the file is committed, shared, and lives on a USB key, so
+a plaintext domain account in it is a domain-wide problem rather than a local
+one. The technician types their own account into the standard Windows credential
+dialog at the moment of joining, and it reaches no log, history log or JSON
+report. `Get-Credential` cannot run unattended, so `-NonInteractive` can never
+join a domain.
+
+The tool never restarts the machine — a reboot mid-run would destroy the
+checklist, the history log and the JSON report. Neither a new name nor domain
+membership takes effect until the technician restarts, and the checklist says so.
+
 ## Branding
 
 The startup logo is read from `banner.txt` at the project root. To use your own,
@@ -324,7 +347,7 @@ tests/
 
 ## Documentation
 
-- **[The manual (PDF)](docs/manual.pdf)** — 25 pages: what the tool does, what
+- **[The manual (PDF)](docs/manual.pdf)** — 27 pages: what the tool does, what
   it leaves to you, the architecture in diagrams, PowerShell explained from
   nothing, how to add your own module, and how to read the diagnostic when
   something goes wrong.

@@ -139,9 +139,9 @@ function Test-WcdElevated {
         Reports whether the current process holds Administrator rights.
 
     .DESCRIPTION
-        The power steps and the encryption check need elevation. A run without
-        it still completes; those steps report as actionable warnings instead of
-        failures.
+        The power steps, the encryption check and a domain join need elevation. A
+        run without it still completes; those steps report as actionable warnings
+        instead of failures.
         Returns $false on any platform where the Windows principal cannot be
         read, which is the safe answer: nothing is attempted that needs admin.
 
@@ -361,6 +361,136 @@ function Get-WcdSystemDriveLetter {
     return $driveLetter
 }
 
+function Get-WcdMachineSerial {
+    <#
+    .SYNOPSIS
+        Returns the machine's serial number, as the factory stamped it.
+
+    .DESCRIPTION
+        Read from SMBIOS through Win32_Bios. Displayed only, never changed: no
+        supported Windows API writes it. It is what the technician reads off the
+        chassis label, so it is what identifies the machine in the history block
+        and beside the naming prompt.
+
+        A machine that reports nothing usable degrades to the fallback rather
+        than failing a run - plenty of virtual machines and white boxes have no
+        serial at all.
+
+    .PARAMETER Fallback
+        Returned when the serial cannot be read. Defaults to 'Unknown'.
+
+    .OUTPUTS
+        [string] The serial, or Fallback.
+
+    .EXAMPLE
+        Get-WcdMachineSerial   # 5CG2141ABC
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Fallback = 'Unknown'
+    )
+
+    try {
+        $biosInfo = Get-CimInstance Win32_Bios -ErrorAction Stop
+        if ($null -ne $biosInfo -and -not [string]::IsNullOrWhiteSpace($biosInfo.SerialNumber)) {
+            return $biosInfo.SerialNumber.Trim()
+        }
+    } catch {
+    }
+
+    return $Fallback
+}
+
+function Test-WcdComputerName {
+    <#
+    .SYNOPSIS
+        Checks a typed computer name and names the first thing wrong with it.
+
+    .DESCRIPTION
+        The typed name is a trust boundary: it is rejected here, before any call
+        is made, rather than through a Rename-Computer failure at the end of the
+        run when the technician has already moved on.
+
+        Returns a reason key rather than a sentence, so the prompt can re-ask in
+        the technician's own language and the caller decides how loud each reason
+        is. 'Unchanged' is not a fault - renaming a machine to the name it
+        already has is a no-op worth saying out loud, not an error.
+
+    .PARAMETER Name
+        The typed name.
+
+    .PARAMETER CurrentName
+        The machine's current name. Defaults to %COMPUTERNAME%.
+
+    .OUTPUTS
+        [string] '' when the name is usable, otherwise 'Length', 'Characters',
+        'AllDigits' or 'Unchanged'.
+
+    .EXAMPLE
+        Test-WcdComputerName -Name 'POSTE-01'   # ''
+
+    .EXAMPLE
+        Test-WcdComputerName -Name 'POSTE 01'   # Characters
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Name,
+
+        [string]$CurrentName = $env:COMPUTERNAME
+    )
+
+    # 15 characters is the NetBIOS limit, and it is still what a domain sees.
+    if ($Name.Length -lt 1 -or $Name.Length -gt 15) { return 'Length' }
+
+    # Everything Windows rejects in a computer name, plus the underscore, which
+    # it accepts and DNS does not.
+    if ($Name -match '[\s\\/:*?"<>|.,~!@#$%^&\x27(){}_]') { return 'Characters' }
+
+    if ($Name -match '^\d+$') { return 'AllDigits' }
+
+    if ($Name -eq $CurrentName) { return 'Unchanged' }
+
+    return ''
+}
+
+function Get-WcdDomainTarget {
+    <#
+    .SYNOPSIS
+        Returns the domain to offer joining, or nothing when none is declared.
+
+    .DESCRIPTION
+        The manifest holds the domain name and the optional OU path - never a
+        credential. An absent or empty Domain.Name removes the domain option from
+        the prompt entirely, the same way an empty Printers array removes that
+        Module.
+
+    .PARAMETER Config
+        The imported manifest. Optional.
+
+    .OUTPUTS
+        [pscustomobject] with Name and OUPath, or nothing.
+
+    .EXAMPLE
+        (Get-WcdDomainTarget -Config $config).Name   # corp.example.com
+    #>
+    [CmdletBinding()]
+    param(
+        [hashtable]$Config
+    )
+
+    if ($null -eq $Config -or $null -eq $Config.Domain) { return }
+
+    $name = ([string]$Config.Domain.Name).Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) { return }
+
+    return [pscustomobject]@{
+        Name   = $name
+        OUPath = ([string]$Config.Domain.OUPath).Trim()
+    }
+}
+
 function Get-WcdPrinterStepKey {
     <#
     .SYNOPSIS
@@ -436,6 +566,8 @@ function Get-WcdTechnicalStepLabels {
         'DiskFreeSpace'          = 'Free space'
         'TpmReadiness'           = 'TPM readiness'
         'BitLockerStatus'        = 'Drive encryption'
+        'ComputerName'           = 'Computer name'
+        'DomainJoin'             = 'Domain join'
         'NetworkAdapterStatus'   = 'Network adapters'
         'NetworkPing8888'        = 'Connectivity test'
         'RefreshNetworkPlaces'   = 'Refresh network places'
@@ -505,7 +637,14 @@ function Get-WcdModuleProgressPlan {
     $printerSteps = @(Get-WcdPrinterTarget -Config $Config |
         ForEach-Object { Get-WcdPrinterStepKey -Name ([string]$_.Name) })
 
+    # Identity Steps exist only when the technician asked for them, so a run
+    # that declined both skips the Module rather than reporting an empty one.
+    $identitySteps = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$ExecutionOptions.NewComputerName)) { $identitySteps += 'ComputerName' }
+    if ($ExecutionOptions.JoinDomain) { $identitySteps += 'DomainJoin' }
+
     return @{
+        'Config-Identity' = $identitySteps
         'Config-Power' = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
             @(
                 'ScreenTimeoutBattery',
@@ -961,20 +1100,12 @@ function Get-WcdHistoryBlock {
     )
 
     $pcName = $env:COMPUTERNAME
-    $serialNumber = 'Inconnu'
+    $serialNumber = Get-WcdMachineSerial -Fallback 'Inconnu'
     $computerModel = 'Inconnu'
     try {
         $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
         if ($null -ne $osInfo -and -not [string]::IsNullOrWhiteSpace($osInfo.CSName)) {
             $pcName = $osInfo.CSName
-        }
-    } catch {
-    }
-
-    try {
-        $biosInfo = Get-CimInstance Win32_Bios -ErrorAction Stop
-        if ($null -ne $biosInfo -and -not [string]::IsNullOrWhiteSpace($biosInfo.SerialNumber)) {
-            $serialNumber = $biosInfo.SerialNumber.Trim()
         }
     } catch {
     }

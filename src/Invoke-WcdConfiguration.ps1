@@ -36,6 +36,14 @@
 .PARAMETER OptionalTools
     Comma-separated names of Optional Tools to run, skipping their menu.
 
+.PARAMETER NewComputerName
+    Rename the machine to this, without asking. Validated the same way a typed
+    name is; nothing is applied until the machine restarts.
+
+.PARAMETER JoinDomain
+    Join the domain declared in the manifest. Still opens the credential dialog,
+    so it does not make an unattended join possible.
+
 .PARAMETER HistoryLogPath
     Second file this run's summary block is appended to - one running record
     across every machine configured from the same USB key.
@@ -100,6 +108,10 @@ param(
 
     [string]$OptionalTools,
 
+    [string]$NewComputerName,
+
+    [switch]$JoinDomain,
+
     [string]$HistoryLogPath,
 
     [string]$LocalProjectRoot,
@@ -155,6 +167,9 @@ $T = if ($ScriptUI -eq 'EN') {
             DiskFreeSpace  = 'Free space'
             Tpm            = 'TPM readiness'
             BitLocker      = 'Drive encryption'
+            ComputerName   = 'Computer name'
+            DomainJoin     = 'Domain membership'
+            RestartNeeded  = 'Restart required'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -163,12 +178,16 @@ $T = if ($ScriptUI -eq 'EN') {
         KeyYes                  = 'Y'
         KeyNo                   = 'N'
         Labels                  = @{
-            Laptop      = 'Laptop'
-            Desktop     = 'Desktop'
-            Workstation = 'Workstation'
-            Vdi         = 'Citrix / VDI'
-            Yes         = 'Yes'
-            No          = 'No'
+            Laptop       = 'Laptop'
+            Desktop      = 'Desktop'
+            Workstation  = 'Workstation'
+            Vdi          = 'Citrix / VDI'
+            Yes          = 'Yes'
+            No           = 'No'
+            Neither      = 'Neither'
+            ComputerName = 'Computer name'
+            Domain       = 'Domain'
+            Both         = 'Both'
         }
         NoChoicesAvailable      = 'No choices available.'
         DefaultLabel            = '[default]'
@@ -194,6 +213,24 @@ $T = if ($ScriptUI -eq 'EN') {
         PromptOpenApps          = 'Open {0} configuration applications?'
         PromptOpenAppsDesc1     = '  Opens the Application Targets declared in WinContextDeploy.psd1.'
         PromptOpenAppsDesc2     = '  Answer Yes unless applications were already opened manually.'
+        KeyNeither              = 'N'
+        KeyComputerName         = 'C'
+        KeyDomain               = 'D'
+        KeyBoth                 = 'B'
+        PromptIdentity          = 'Machine identity'
+        PromptIdentitySerial    = '  Serial: {0}   (read-only, from firmware)'
+        PromptIdentityDesc1     = '  Change the computer name, or join the domain?'
+        PromptIdentityDesc2     = '  Neither is applied until the machine restarts.'
+        PromptIdentityDomain    = '  Domain: {0}'
+        PromptComputerName      = 'New computer name'
+        PromptComputerNameDesc  = '  1-15 characters, letters digits and hyphens, not all digits.'
+        ComputerNameRejected    = @{
+            Length     = '  Rejected: a computer name is 1 to 15 characters.'
+            Characters = '  Rejected: no spaces, and none of \ / : * ? " < > | . , ~ ! @ # $ % ^ & ( ) { } _'
+            AllDigits  = '  Rejected: a computer name cannot be all digits.'
+            Unchanged  = '  That is already the name of this machine.'
+        }
+        CredentialPrompt        = 'Domain account allowed to join {0}'
         PromptEngineer          = 'Engineering workstation? (offers the optional tools)'
         PromptEngineerDesc1     = '  Offers the extras declared Prompt in WinContextDeploy.psd1.'
         PromptEngineerDesc2     = '  Answer No for a standard device.'
@@ -201,6 +238,8 @@ $T = if ($ScriptUI -eq 'EN') {
         MissingStepTech         = 'Missing technical step: {0}'
         ApplicationManualDetail = 'Launch skipped (answered No). Manual verification required.'
         StandardManualDetail    = 'Must be done manually.'
+        IdentityManualDetail    = 'Not requested this run. Must be done manually if the machine needs it.'
+        RestartManualDetail     = 'New computer name / domain membership takes effect after a restart.'
         SecondaryNA             = 'Not applicable to the chosen Form Factor or Environment.'
         DeskWindowsDetail       = 'Must be done manually on the Windows desktop.'
         StepCount               = 'step(s)'
@@ -233,8 +272,8 @@ $T = if ($ScriptUI -eq 'EN') {
         DiagFinalByModule       = '         FINAL DIAGNOSTIC - BY MODULE         '
         DiagFinalByStep         = '         FINAL DIAGNOSTIC - BY STEP           '
         LogEndSummary           = '=== Execution complete: {0} OK, {1} warning(s), {2} error(s), {3} manual, {4} N/A ==='
-        ElevationRequest        = 'The power settings and the encryption check need Administrator. Requesting elevation...'
-        ElevationDeclined       = 'Continuing without Administrator. The power and encryption steps will report as needing elevation.'
+        ElevationRequest        = 'The power settings, the encryption check and a domain join need Administrator. Requesting elevation...'
+        ElevationDeclined       = 'Continuing without Administrator. The power, encryption and machine identity steps will report as needing elevation.'
         ElevationUncWarning     = '[WARNING] -HistoryLogPath points at a network share ({0}). Elevation opens a new logon session, which drops mapped drives, so the history export may fail after the relaunch.'
         ReportWritten           = 'JSON report written to: {0}'
         ReportFailed            = '[WARNING] JSON report could not be written to {0}. Detail: {1}'
@@ -255,6 +294,10 @@ $T = if ($ScriptUI -eq 'EN') {
             TpmNotReady         = 'Enable the TPM (PTT or fTPM) in the firmware. A TPM that is present but not ready usually needs clearing or initialising from tpm.msc.'
             BitLockerOff        = 'Enable BitLocker on the system drive before handover, or confirm the fleet policy applies it after enrolment.'
             BitLockerInProgress = 'Encryption is still running. Let it finish before handover; the drive is not protected until it does.'
+            ComputerNameInvalid = 'The name "{0}" is not a usable computer name. Re-run and type 1 to 15 characters, letters digits and hyphens only.'
+            ComputerNameFailed  = 'The rename was refused. Check that the run is elevated and that no policy pins the computer name.'
+            DomainJoinFailed    = 'The domain join failed. Check the domain is reachable, the account may join machines, and Domain.OUPath in WinContextDeploy.psd1 exists.'
+            JoinCancelled       = 'The credential dialog was cancelled. Re-run and supply a domain account, or join the machine by hand.'
             BitLockerUnavailable = 'This edition does not support BitLocker. Confirm the machine should ship on it, or reimage with an edition that does.'
         }
     }
@@ -290,6 +333,9 @@ $T = if ($ScriptUI -eq 'EN') {
             DiskFreeSpace  = 'Espace libre'
             Tpm            = 'Etat du TPM'
             BitLocker      = 'Chiffrement du disque'
+            ComputerName   = 'Nom du poste'
+            DomainJoin     = 'Appartenance au domaine'
+            RestartNeeded  = 'Redemarrage requis'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -298,12 +344,16 @@ $T = if ($ScriptUI -eq 'EN') {
         KeyYes                  = 'O'
         KeyNo                   = 'N'
         Labels                  = @{
-            Laptop      = 'Portable'
-            Desktop     = 'Bureau'
-            Workstation = 'Principal'
-            Vdi         = 'Citrix'
-            Yes         = 'Oui'
-            No          = 'Non'
+            Laptop       = 'Portable'
+            Desktop      = 'Bureau'
+            Workstation  = 'Principal'
+            Vdi          = 'Citrix'
+            Yes          = 'Oui'
+            No           = 'Non'
+            Neither      = 'Aucun'
+            ComputerName = 'Nom du poste'
+            Domain       = 'Domaine'
+            Both         = 'Les deux'
         }
         NoChoicesAvailable      = 'Aucun choix disponible.'
         DefaultLabel            = '[defaut]'
@@ -329,6 +379,24 @@ $T = if ($ScriptUI -eq 'EN') {
         PromptOpenApps          = 'Ouvrir les applications de configuration {0} ?'
         PromptOpenAppsDesc1     = '  Ouvre les applications declarees dans WinContextDeploy.psd1.'
         PromptOpenAppsDesc2     = '  Repondre Oui sauf si les applications ont deja ete ouvertes manuellement.'
+        KeyNeither              = 'A'
+        KeyComputerName         = 'N'
+        KeyDomain               = 'D'
+        KeyBoth                 = 'L'
+        PromptIdentity          = 'Identite du poste'
+        PromptIdentitySerial    = '  Numero de serie: {0}   (lecture seule, du micrologiciel)'
+        PromptIdentityDesc1     = '  Changer le nom du poste, ou joindre le domaine ?'
+        PromptIdentityDesc2     = '  Ni l un ni l autre ne prend effet avant le redemarrage.'
+        PromptIdentityDomain    = '  Domaine: {0}'
+        PromptComputerName      = 'Nouveau nom du poste'
+        PromptComputerNameDesc  = '  1 a 15 caracteres, lettres chiffres et traits d union, pas que des chiffres.'
+        ComputerNameRejected    = @{
+            Length     = '  Refuse: un nom de poste fait de 1 a 15 caracteres.'
+            Characters = '  Refuse: pas d espace, ni aucun de \ / : * ? " < > | . , ~ ! @ # $ % ^ & ( ) { } _'
+            AllDigits  = '  Refuse: un nom de poste ne peut pas etre uniquement numerique.'
+            Unchanged  = '  Le poste porte deja ce nom.'
+        }
+        CredentialPrompt        = 'Compte de domaine autorise a joindre {0}'
         PromptEngineer          = "Poste d ingenieur ? (propose les outils optionnels)"
         PromptEngineerDesc1     = '  Propose les extras declares Prompt dans WinContextDeploy.psd1.'
         PromptEngineerDesc2     = '  Repondre Non pour un poste standard.'
@@ -336,6 +404,8 @@ $T = if ($ScriptUI -eq 'EN') {
         MissingStepTech         = 'Etape technique manquante: {0}'
         ApplicationManualDetail = 'Ouverture ignoree (repondu Non). Verification manuelle requise.'
         StandardManualDetail    = 'A faire manuellement.'
+        IdentityManualDetail    = 'Non demande cette fois. A faire manuellement si le poste en a besoin.'
+        RestartManualDetail     = 'Le nouveau nom du poste et l appartenance au domaine prennent effet apres un redemarrage.'
         SecondaryNA             = 'Non applicable au type de poste ou a l usage choisi.'
         DeskWindowsDetail       = 'A faire manuellement sur le bureau Windows.'
         StepCount               = 'etape(s)'
@@ -368,8 +438,8 @@ $T = if ($ScriptUI -eq 'EN') {
         DiagFinalByModule       = '         DIAGNOSTIC FINAL - PAR MODULE         '
         DiagFinalByStep         = '         DIAGNOSTIC FINAL - PAR ETAPE          '
         LogEndSummary           = '=== Fin execution: {0} OK, {1} warning(s), {2} erreur(s), {3} manuel(le)(s), {4} N/A ==='
-        ElevationRequest        = 'Les options d alimentation et la verification du chiffrement exigent les droits Administrateur. Demande d elevation...'
-        ElevationDeclined       = 'Poursuite sans droits Administrateur. Les etapes d alimentation et de chiffrement seront signalees comme exigeant une elevation.'
+        ElevationRequest        = 'Les options d alimentation, la verification du chiffrement et la jonction au domaine exigent les droits Administrateur. Demande d elevation...'
+        ElevationDeclined       = 'Poursuite sans droits Administrateur. Les etapes d alimentation, de chiffrement et d identite du poste seront signalees comme exigeant une elevation.'
         ElevationUncWarning     = '[AVERTISSEMENT] -HistoryLogPath pointe vers un partage reseau ({0}). L elevation ouvre une nouvelle session d ouverture, qui perd les lecteurs mappes: l export historique peut echouer apres le relancement.'
         ReportWritten           = 'Rapport JSON ecrit dans: {0}'
         ReportFailed            = '[AVERTISSEMENT] Rapport JSON impossible a ecrire dans {0}. Detail: {1}'
@@ -390,6 +460,10 @@ $T = if ($ScriptUI -eq 'EN') {
             TpmNotReady         = 'Activer le TPM (PTT ou fTPM) dans le micrologiciel. Un TPM present mais pas pret doit generalement etre efface ou initialise depuis tpm.msc.'
             BitLockerOff        = 'Activer BitLocker sur le disque systeme avant la remise du poste, ou confirmer que la politique du parc l applique apres l inscription.'
             BitLockerInProgress = 'Le chiffrement est encore en cours. Le laisser terminer avant la remise du poste: le disque n est pas protege tant qu il ne l est pas.'
+            ComputerNameInvalid = 'Le nom "{0}" n est pas un nom de poste utilisable. Relancer et saisir de 1 a 15 caracteres, lettres chiffres et traits d union seulement.'
+            ComputerNameFailed  = 'Le renommage a ete refuse. Verifier que la run est elevee et qu aucune politique ne fige le nom du poste.'
+            DomainJoinFailed    = 'La jonction au domaine a echoue. Verifier que le domaine est joignable, que le compte peut joindre des postes, et que Domain.OUPath dans WinContextDeploy.psd1 existe.'
+            JoinCancelled       = 'La fenetre d identifiants a ete annulee. Relancer et fournir un compte de domaine, ou joindre le poste a la main.'
             BitLockerUnavailable = 'Cette edition ne prend pas en charge BitLocker. Confirmer que le poste doit etre remis avec cette edition, ou reimager avec une edition qui la prend en charge.'
         }
     }
@@ -769,6 +843,64 @@ function Wait-WcdForEnter {
     }
 }
 
+function Read-WcdComputerName {
+    <#
+    .SYNOPSIS
+        Asks for a new computer name, re-asking until it is usable.
+
+    .DESCRIPTION
+        The typed name is a trust boundary, so it is checked here and rejected
+        with a re-prompt rather than through a Rename-Computer failure at the end
+        of the run. A name identical to the current one is not a fault: it is
+        reported as nothing to do and the prompt closes.
+
+    .PARAMETER CurrentName
+        The machine's current name, so a rename that changes nothing is caught.
+
+    .PARAMETER SerialNumber
+        Serial shown beside the prompt - it is what the technician reads off the
+        chassis label when deciding the name.
+
+    .OUTPUTS
+        [string] The accepted name, or empty when the technician typed nothing or
+        typed the name the machine already has.
+
+    .EXAMPLE
+        Read-WcdComputerName -CurrentName $env:COMPUTERNAME -SerialNumber '5CG2141ABC'
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$CurrentName = $env:COMPUTERNAME,
+
+        [string]$SerialNumber = ''
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($SerialNumber)) {
+        Write-Host ($T.PromptIdentitySerial -f $SerialNumber) -ForegroundColor DarkGray
+    }
+    Write-Host $T.PromptComputerNameDesc -ForegroundColor DarkGray
+
+    while ($true) {
+        $typed = (Read-Host $T.PromptComputerName)
+        if ($null -eq $typed) { return '' }
+
+        $typed = $typed.Trim()
+        if ([string]::IsNullOrWhiteSpace($typed)) { return '' }
+
+        $reason = Test-WcdComputerName -Name $typed -CurrentName $CurrentName
+
+        # Nothing to do is an answer, not a rejection: stop asking.
+        if ($reason -eq 'Unchanged') {
+            Write-Host $T.ComputerNameRejected.Unchanged -ForegroundColor Yellow
+            return ''
+        }
+
+        if ($reason -eq '') { return $typed }
+
+        Write-Host $T.ComputerNameRejected[$reason] -ForegroundColor Yellow
+    }
+}
+
 function Resolve-WcdExecutionOptions {
     <#
     .SYNOPSIS
@@ -798,12 +930,22 @@ function Resolve-WcdExecutionOptions {
     .PARAMETER OptionalToolCandidates
         Prompt entries available to offer.
 
+    .PARAMETER SelectedNewComputerName
+        New computer name supplied on the command line, or empty to prompt.
+
+    .PARAMETER SelectedJoinDomain
+        Join the manifest's domain without asking whether to.
+
+    .PARAMETER DomainTarget
+        The domain from the manifest, from Get-WcdDomainTarget. Nothing there
+        means no domain to offer, and the prompt drops the option.
+
     .PARAMETER DisablePrompt
         Ask nothing: use what was supplied, and the defaults for the rest.
 
     .OUTPUTS
-        [pscustomobject] with Language, FormFactor, Environment, OpenApps and
-        OptionalTools.
+        [pscustomobject] with Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
 
     .EXAMPLE
         Resolve-WcdExecutionOptions -SelectedFormFactor 'Desktop' -DisablePrompt
@@ -816,6 +958,9 @@ function Resolve-WcdExecutionOptions {
         [string]$SelectedOpenApps,
         [string]$SelectedOptionalTools,
         [object[]]$OptionalToolCandidates = @(),
+        [string]$SelectedNewComputerName,
+        [switch]$SelectedJoinDomain,
+        [pscustomobject]$DomainTarget,
         [switch]$DisablePrompt
     )
 
@@ -824,6 +969,8 @@ function Resolve-WcdExecutionOptions {
     $usageResult = $SelectedEnvironment
     $openAppsResult = $SelectedOpenApps
     $engineerResult = $SelectedOptionalTools
+    $newNameResult = $SelectedNewComputerName
+    $joinResult = [bool]$SelectedJoinDomain
 
     $engineerTypes = @()
 
@@ -854,6 +1001,36 @@ function Resolve-WcdExecutionOptions {
                 -Description @($T.PromptOpenAppsDesc1, $T.PromptOpenAppsDesc2)
         }
 
+        # Machine identity, offered only when there is something left to offer.
+        # -NewComputerName or -JoinDomain on the command line answers it already.
+        if (-not $newNameResult -and -not $joinResult) {
+            $serialNumber = Get-WcdMachineSerial
+            $currentName = $env:COMPUTERNAME
+
+            $identityChoices = [ordered]@{ $T.KeyNeither = 'Neither'; $T.KeyComputerName = 'ComputerName' }
+            $identityDescription = @(
+                ($T.PromptIdentitySerial -f $serialNumber),
+                $T.PromptIdentityDesc1,
+                $T.PromptIdentityDesc2
+            )
+            if ($null -ne $DomainTarget) {
+                $identityChoices[$T.KeyDomain] = 'Domain'
+                $identityChoices[$T.KeyBoth] = 'Both'
+                $identityDescription += ($T.PromptIdentityDomain -f $DomainTarget.Name)
+            }
+
+            Write-Host ''
+            $identityResult = Read-WcdChoice -Prompt $T.PromptIdentity -Choices $identityChoices -DefaultKey $T.KeyNeither `
+                -Description $identityDescription
+
+            if (@('ComputerName', 'Both') -contains $identityResult) {
+                $newNameResult = Read-WcdComputerName -CurrentName $currentName -SerialNumber $serialNumber
+            }
+            if (@('Domain', 'Both') -contains $identityResult) {
+                $joinResult = $true
+            }
+        }
+
         if (-not $engineerResult -and @($OptionalToolCandidates).Count -gt 0) {
             Write-Host ''
             $engineerYesNo = Read-WcdChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyNo `
@@ -877,12 +1054,18 @@ function Resolve-WcdExecutionOptions {
     if (-not $openAppsResult)  { $openAppsResult  = 'Yes' }
 
 
+    # A domain the manifest does not declare cannot be joined, whatever was
+    # asked for on the command line.
+    if ($null -eq $DomainTarget) { $joinResult = $false }
+
     return [pscustomobject]@{
-        Language      = $languageResult
-        FormFactor    = $deviceResult
-        Environment   = $usageResult
-        OpenApps      = ($openAppsResult -eq 'Yes')
-        OptionalTools = $engineerTypes
+        Language        = $languageResult
+        FormFactor      = $deviceResult
+        Environment     = $usageResult
+        OpenApps        = ($openAppsResult -eq 'Yes')
+        OptionalTools   = $engineerTypes
+        NewComputerName = $newNameResult
+        JoinDomain      = $joinResult
     }
 }
 
@@ -937,6 +1120,9 @@ $openAppsValue = if ($OpenApps) { 'Yes' } else { '' }
 # Optional tools are Application Targets flagged Prompt in the manifest.
 $optionalToolCandidates = @(Get-WcdPromptedApplicationTarget -Config $script:WcdConfig)
 
+# No Domain.Name in the manifest means no domain option in the prompt.
+$domainTarget = Get-WcdDomainTarget -Config $script:WcdConfig
+
 $executionOptions = Resolve-WcdExecutionOptions `
     -SelectedLanguage $Language `
     -SelectedFormFactor $FormFactor `
@@ -944,6 +1130,9 @@ $executionOptions = Resolve-WcdExecutionOptions `
     -SelectedOpenApps $openAppsValue `
     -SelectedOptionalTools $OptionalTools `
     -OptionalToolCandidates $optionalToolCandidates `
+    -SelectedNewComputerName $NewComputerName `
+    -SelectedJoinDomain:$JoinDomain `
+    -DomainTarget $domainTarget `
     -DisablePrompt:$NonInteractive
 
 $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
@@ -1475,6 +1664,28 @@ function Get-WcdFinalChecklistEntries {
     $entries = @()
     $applicationsSkipped = $lookup.ContainsKey('ApplicationsSkip')
 
+    # --- Machine identity -----------------------------------------------------
+    # Declining is a choice, not a filter, so both rows are Manual Steps rather
+    # than Not Applicable - which also lets a fleet-wide report show which
+    # machines are still unnamed.
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.ComputerName -ResultLookup $lookup `
+        -StepKeys @('ComputerName') -StepLabels $StepLabels `
+        -MissingKind 'manual' -MissingDetail $T.IdentityManualDetail
+    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DomainJoin -ResultLookup $lookup `
+        -StepKeys @('DomainJoin') -StepLabels $StepLabels `
+        -MissingKind 'manual' -MissingDetail $T.IdentityManualDetail
+
+    # The tool never restarts the machine: a reboot mid-run would destroy the
+    # checklist, the history log and the JSON report. So it says so instead,
+    # but only when there is actually something waiting on a restart.
+    # Applied, not merely successful: renaming a machine to the name it already
+    # has succeeds without changing anything a restart would take effect for.
+    $identityApplied = @(Get-WcdResultsForSteps -ResultLookup $lookup -StepKeys @('ComputerName', 'DomainJoin') |
+        Where-Object { $_.Applied })
+    if ($identityApplied.Count -gt 0) {
+        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.RestartNeeded -Kind 'manual' -Detail $T.RestartManualDetail
+    }
+
     # --- OS configuration, in the order the modules run -----------------------
     $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Taskbar -ResultLookup $lookup `
         -StepKeys @('TaskbarAlignLeft', 'DisableTaskView') -StepLabels $StepLabels
@@ -1620,6 +1831,7 @@ function Get-WcdFinalDiagnosticLines {
 
 # --- Modules to run, in order ---
 $modules = @(
+    @{ Name = 'Config-Identity';      File = 'Config-Identity.ps1' },
     @{ Name = 'Config-Power';         File = 'Config-Power.ps1' },
     @{ Name = 'Config-Decimal';       File = 'Config-Decimal.ps1' },
     @{ Name = 'Config-TaskbarLeft';   File = 'Config-TaskbarLeft.ps1' },
@@ -1631,6 +1843,9 @@ $modules = @(
     @{ Name = 'Config-Network';       File = 'Config-Network.ps1' },
     @{ Name = 'Config-Printer';       File = 'Config-Printer.ps1' }
 )
+
+$identityDomainName = if ($null -ne $domainTarget) { [string]$domainTarget.Name } else { '' }
+$identityOUPath = if ($null -ne $domainTarget) { [string]$domainTarget.OUPath } else { '' }
 
 $stepLabels = Get-WcdTechnicalStepLabels -Config $script:WcdConfig
 $moduleStepPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $script:WcdConfig
@@ -1694,6 +1909,16 @@ foreach ($mod in $modules) {
 
     try {
         switch ($modName) {
+            'Config-Identity' {
+                $modResults = @(Set-WcdMachineIdentity `
+                    -NewComputerName $executionOptions.NewComputerName `
+                    -JoinDomain $executionOptions.JoinDomain `
+                    -DomainName $identityDomainName `
+                    -OUPath $identityOUPath `
+                    -Elevated $isElevated `
+                    -PromptMessage ($T.CredentialPrompt -f $identityDomainName) `
+                    -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
+            }
             'Config-Power' {
                 $modResults = @(Set-WcdPowerConfiguration -FormFactor $executionOptions.FormFactor -Elevated $isElevated -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
             }
