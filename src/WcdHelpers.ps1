@@ -313,7 +313,7 @@ function Get-WcdResultSeverity {
         A Step Result object.
 
     .OUTPUTS
-        [string] 'ERROR', 'WARNING' or 'INFO'.
+        [string] 'ERROR', 'WARNING', 'MANUAL' or 'INFO'.
 
     .EXAMPLE
         Get-WcdResultSeverity -Result ([pscustomobject]@{ Step = 'X'; Success = $false })   # ERROR
@@ -561,6 +561,7 @@ function Get-WcdTechnicalStepLabels {
         'DisplayLanguage'        = 'Display language'
         'KeyboardLayout'         = 'Keyboard layout'
         'ApplicationsSkip'       = 'Applications skipped'
+        'WingetUnavailable'      = 'App Installer (winget)'
         'DeviceManagerStatus'    = 'Device Manager'
         'DiskHealth'             = 'Disk health'
         'DiskFreeSpace'          = 'Free space'

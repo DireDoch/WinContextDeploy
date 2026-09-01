@@ -218,6 +218,13 @@ Each entry in `Applications` declares what to do and what to do it to:
 | `OpenUrl` | Opens a URL in the default browser |
 | `CheckProcess` | Verifies a process is running; `Target` is an array of names |
 | `CheckPath` | Verifies a path exists; launches nothing |
+| `CheckWinget` | Verifies a winget package id is installed; installs nothing |
+
+`CheckWinget` asks App Installer whether a package id is installed, which is
+stable where an install path is not. It never installs or upgrades anything. On
+an image without winget — LTSC and stripped images — the run reports that once
+as a warning and every `CheckWinget` entry becomes a **Manual Step** to verify by
+hand.
 
 `Environment` and `FormFactor` filter an entry to matching machines. A filtered-out
 target is reported **Not Applicable** in the checklist rather than omitted, so the
