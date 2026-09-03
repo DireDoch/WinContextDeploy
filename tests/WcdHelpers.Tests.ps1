@@ -283,4 +283,148 @@ Describe 'WcdHelpers' {
             -Module @('Config-Printer') -Config @{ Printers = @() } -ExecutionOptions $executionOptions)
         @($emptyPlan['Config-Printer']).Count | Should -Be 0
     }
+
+    Context 'Invoke-WcdStep' {
+        BeforeAll {
+            function script:Invoke-TestStep {
+                param([hashtable]$Extra = @{}, [scriptblock]$Action)
+
+                $arguments = @{
+                    Module           = 'Config-Test'
+                    Key              = 'TestStep'
+                    LogPath          = (Join-Path $TestDrive ('step_{0}.txt' -f [guid]::NewGuid()))
+                    Action           = $Action
+                    ProgressCallback = { param($eventData) [void]$script:StepEvents.Add(('{0}/{1}' -f $eventData.Event, $eventData.Kind)) }
+                }
+                foreach ($name in $Extra.Keys) { $arguments[$name] = $Extra[$name] }
+
+                $script:StepEvents = [System.Collections.ArrayList]::new()
+                $result = Invoke-WcdStep @arguments
+                return [pscustomobject]@{
+                    Result = $result
+                    Events = @($script:StepEvents)
+                    Log    = if (Test-Path -LiteralPath $arguments.LogPath) { Get-Content -LiteralPath $arguments.LogPath -Raw } else { '' }
+                }
+            }
+        }
+
+        It 'retourne un succes quand l Action ne dit rien' {
+            $run = Invoke-TestStep -Extra @{ SuccessLog = 'Test: done.' } -Action { }
+
+            $run.Result.Step | Should -Be 'TestStep'
+            $run.Result.Success | Should -BeTrue
+            $run.Result.Error | Should -Be ''
+            # Un succes nu ne porte que trois proprietes: pas de Severity vide
+            # que le Diagnostic devrait ensuite apprendre a ignorer.
+            @($run.Result.PSObject.Properties).Count | Should -Be 3
+            $run.Log | Should -Match 'Test: done\.'
+            $run.Events | Should -Be @('Start/success', 'Finish/success')
+        }
+
+        It 'ignore ce que l Action ecrit dans le pipeline' {
+            # Une Action qui appelle une commande bavarde veut quand meme dire
+            # "ca a marche"; seul un hashtable est un fragment de Resultat.
+            $run = Invoke-TestStep -Action { 'du bruit'; 42 }
+
+            $run.Result.Success | Should -BeTrue
+            @($run.Result.PSObject.Properties).Count | Should -Be 3
+        }
+
+        It 'transforme une exception en echec avec son remede' {
+            $run = Invoke-TestStep -Extra @{ FailureLabel = 'Mon etape'; FailureRemedy = 'PowerCfgFailed' } `
+                -Action { throw 'powercfg a refuse' }
+
+            $run.Result.Success | Should -BeFalse
+            $run.Result.Error | Should -Be 'powercfg a refuse'
+            $run.Result.RemedyKey | Should -Be 'PowerCfgFailed'
+            $run.Log | Should -Match '\[ERROR\] Mon etape: powercfg a refuse'
+            $run.Events | Should -Be @('Start/success', 'Finish/error')
+        }
+
+        It 'laisse OnFailure classer l echec' {
+            $run = Invoke-TestStep -Extra @{
+                FailureLabel  = 'Taskbar align'
+                FailureRemedy = 'RegistryWriteFailed'
+                OnFailure     = {
+                    param($errorRecord)
+                    if ($errorRecord.Exception -is [System.UnauthorizedAccessException]) {
+                        return @{ Error = 'Registry key locked by GPO or access denied.'; RemedyKey = 'RegistryGpo' }
+                    }
+                    return @{ Error = $errorRecord.Exception.Message; RemedyKey = 'RegistryWriteFailed' }
+                }
+            } -Action { throw [System.UnauthorizedAccessException]::new('Operation non autorisee') }
+
+            $run.Result.Success | Should -BeFalse
+            $run.Result.Error | Should -Be 'Registry key locked by GPO or access denied.'
+            $run.Result.RemedyKey | Should -Be 'RegistryGpo'
+        }
+
+        It 'ne laisse pas OnFailure declarer un succes' {
+            # Une Etape qui a leve a echoue, quoi qu en dise le classificateur.
+            $run = Invoke-TestStep -Extra @{ OnFailure = { param($e) @{ Success = $true; Error = $e.Exception.Message } } } `
+                -Action { throw 'ca a casse' }
+
+            $run.Result.Success | Should -BeFalse
+            $run.Result.Error | Should -Be 'ca a casse'
+        }
+
+        It 'rapporte une Etape qui n a pas tourne sans la faire echouer' {
+            $run = Invoke-TestStep -Action {
+                @{ Severity = 'WARNING'; Error = 'powercfg requires Administrator.'; RemedyKey = 'RequiresAdmin' }
+            }
+
+            $run.Result.Success | Should -BeTrue
+            $run.Result.Severity | Should -Be 'WARNING'
+            $run.Result.RemedyKey | Should -Be 'RequiresAdmin'
+            $run.Events | Should -Be @('Start/success', 'Finish/warning')
+        }
+
+        It 'laisse l Action choisir la severite d apres ce que la machine a dit' {
+            $run = Invoke-TestStep -Action { @{ Severity = 'ERROR'; Error = 'Le disque signale Unhealthy.' } }
+
+            # Severite choisie par la lecture, pas par un throw: Success reste vrai.
+            $run.Result.Success | Should -BeTrue
+            $run.Result.Severity | Should -Be 'ERROR'
+            $run.Events | Should -Be @('Start/success', 'Finish/error')
+        }
+
+        It 'reporte les champs supplementaires que le Diagnostic lit' {
+            $run = Invoke-TestStep -Action { @{ Applied = $true; RebootPending = $true } }
+
+            $run.Result.Applied | Should -BeTrue
+            $run.Result.RebootPending | Should -BeTrue
+        }
+
+        It 'reporte RemedyArgs' {
+            $run = Invoke-TestStep -Action {
+                @{ Severity = 'WARNING'; RemedyKey = 'DiskUnhealthy'; RemedyArgs = @('C:', 'Samsung SSD') }
+            }
+
+            @($run.Result.RemedyArgs) | Should -Be @('C:', 'Samsung SSD')
+        }
+
+        It 'ecrit la ligne de log que l Action demande, et ne met pas Log dans le Resultat' {
+            $run = Invoke-TestStep -Extra @{ SuccessLog = 'jamais ecrit' } -Action {
+                @{ Severity = 'WARNING'; Error = 'requires Administrator.'; Log = 'Mon etape: skipped, needs Administrator.' }
+            }
+
+            $run.Log | Should -Match 'Mon etape: skipped, needs Administrator\.'
+            $run.Log | Should -Not -Match 'jamais ecrit'
+            $run.Result.PSObject.Properties['Log'] | Should -BeNullOrEmpty
+        }
+
+        It 'n ecrit rien quand il n y a rien a dire' {
+            $run = Invoke-TestStep -Action { }
+
+            $run.Log | Should -BeNullOrEmpty
+        }
+
+        It 'garde Step, Success et Error en tete du Resultat' {
+            # Le rapport JSON reprend l ordre des proprietes tel quel.
+            $run = Invoke-TestStep -Action { [ordered]@{ Severity = 'WARNING'; RemedyKey = 'RequiresAdmin' } }
+
+            @($run.Result.PSObject.Properties | ForEach-Object { $_.Name }) |
+                Should -Be @('Step', 'Success', 'Error', 'Severity', 'RemedyKey')
+        }
+    }
 }

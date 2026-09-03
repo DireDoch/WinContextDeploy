@@ -34,24 +34,27 @@ function Set-WcdTaskbarLeft {
     $results = @()
     $moduleName = 'Config-TaskbarLeft'
 
-    # 1. Alignement a gauche
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Start'
-        Set-WcdRegistryValue -Path $registryPath -Name 'TaskbarAl' -Value 0 -PropertyType DWord
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Taskbar: aligned left.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $true; Error = '' }
-    } catch {
-        $note = $_.Exception.Message
-        $remedyKey = 'RegistryWriteFailed'
-        if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
-            $note = 'Registry key locked by GPO or access denied.'
-            $remedyKey = 'RegistryGpo'
+    # A key locked by Group Policy is a different sentence to the technician
+    # than a write that merely failed, and both Steps here hit the same key, so
+    # they classify their failures the same way.
+    $onRegistryFailure = {
+        param($errorRecord)
+
+        $note = $errorRecord.Exception.Message
+        if ($errorRecord.Exception -is [System.UnauthorizedAccessException] -or
+            $note -match 'non autorisee|access is denied|unauthorized') {
+            return @{ Error = 'Registry key locked by GPO or access denied.'; RemedyKey = 'RegistryGpo' }
         }
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar align: {0}" -f $note)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'TaskbarAlignLeft' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'TaskbarAlignLeft'; Success = $false; Error = $note; RemedyKey = $remedyKey }
+
+        return @{ Error = $note; RemedyKey = 'RegistryWriteFailed' }
     }
+
+    # 1. Alignement a gauche
+    $results += Invoke-WcdStep -Module $moduleName -Key 'TaskbarAlignLeft' `
+        -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+        -SuccessLog 'Taskbar: aligned left.' `
+        -FailureLabel 'Taskbar align' -OnFailure $onRegistryFailure `
+        -Action { Set-WcdRegistryValue -Path $registryPath -Name 'TaskbarAl' -Value 0 -PropertyType DWord }
 
     # 2. Desactiver les Widgets (commente: bloque par GPO dans certains environnements)
     # try {
@@ -68,23 +71,11 @@ function Set-WcdTaskbarLeft {
     # }
 
     # 3. Desactiver la Vue des taches
-    try {
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Start'
-        Set-WcdRegistryValue -Path $registryPath -Name 'ShowTaskViewButton' -Value 0 -PropertyType DWord
-        Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message 'Taskbar: task view disabled.'
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Finish' -Kind 'success'
-        $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $true; Error = '' }
-    } catch {
-        $note = $_.Exception.Message
-        $remedyKey = 'RegistryWriteFailed'
-        if ($_.Exception -is [System.UnauthorizedAccessException] -or $note -match 'non autorisee|access is denied|unauthorized') {
-            $note = 'Registry key locked by GPO or access denied.'
-            $remedyKey = 'RegistryGpo'
-        }
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Taskbar task view: {0}" -f $note)
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'DisableTaskView' -Event 'Finish' -Kind 'error'
-        $results += [pscustomobject]@{ Step = 'DisableTaskView'; Success = $false; Error = $note; RemedyKey = $remedyKey }
-    }
+    $results += Invoke-WcdStep -Module $moduleName -Key 'DisableTaskView' `
+        -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+        -SuccessLog 'Taskbar: task view disabled.' `
+        -FailureLabel 'Taskbar task view' -OnFailure $onRegistryFailure `
+        -Action { Set-WcdRegistryValue -Path $registryPath -Name 'ShowTaskViewButton' -Value 0 -PropertyType DWord }
 
     return $results
 }

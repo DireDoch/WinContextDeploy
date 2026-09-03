@@ -1390,6 +1390,68 @@ function Set-WcdMyThingConfiguration {
   ```
 ]
 
+=== `Invoke-WcdStep`, and when not to use it
+
+The template above writes twelve lines around the one line that does the work:
+two progress events, two log lines, a try/catch, and the Result literal twice.
+`Invoke-WcdStep` in `WcdHelpers.ps1` owns all of that, so the step becomes the
+work plus the sentences that describe it:
+
+```powershell
+$results += Invoke-WcdStep -Module $moduleName -Key 'MyStep' `
+    -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+    -SuccessLog 'MyThing: done.' `
+    -FailureLabel 'My thing' -FailureRemedy 'MyStepFailed' `
+    -Action { <the work> }
+```
+
+The Action returns nothing when the step simply worked. When it has more to
+say, it returns a hashtable that is merged over the Result — that one mechanism
+covers every case a step has:
+
+#table(
+  columns: (auto, 1fr),
+  stroke: none,
+  align: (left, left),
+  inset: (x: 5pt, y: 6pt),
+  fill: (_, row) => if calc.odd(row) { greyLight },
+  table.header(
+    text(weight: "bold")[The Action returns], text(weight: "bold")[What it means],
+  ),
+  [nothing], [It worked. Anything the Action writes to the pipeline that is not
+    a hashtable is ignored, so a step calling a chatty command still reads as
+    a success.],
+  [`@{ Severity = 'WARNING'; Error = '...'; RemedyKey = '...' }`],
+    [The step did not run, and here is why. Reported, not failed — this is how
+     `Config-Power` handles an unelevated run.],
+  [`@{ Severity = 'ERROR'; Error = '...' }`],
+    [A severity read off the machine rather than earned by a throw. `Config-Disk`
+     and `Config-BitLocker` decide this way.],
+  [`@{ Applied = $true }`], [An extra field the Diagnostic reads. `RebootPending`
+    is the other one.],
+  [`@{ RemedyKey = '...'; RemedyArgs = @('C:') }`],
+    [Format arguments for the remediation sentence.],
+  [`@{ Log = '...' }`], [Write this instead of `-SuccessLog`. Not part of the
+    Result.],
+)
+
+An Action that throws produces a failed Result carrying `-FailureRemedy`. When
+a step's failures are worth telling apart — a registry key locked by Group
+Policy is a different sentence to the technician than a write that merely
+failed — pass `-OnFailure` a scriptblock that classifies the error, as
+`Config-TaskbarLeft` does for both of its steps at once.
+
+#warn[
+  *Do not reach for it by reflex.* `Config-Applications` and `Config-Printer`
+  loop over manifest entries and decide mid-step which of several Results to
+  record; `Config-Network` branches on what the adapters reported. Written out,
+  those read fine. Squeezed through a runner, they need an escape hatch — and a
+  runner that half its callers escape from is not a runner.
+
+  Ten of the twelve modules are deliberately left as they are. Convert one when
+  it is genuinely the simple case, not to be consistent.
+]
+
 == Declaring it
 
 The orchestrator finds your module by globbing `src/Config-*.ps1`. It does not

@@ -1111,6 +1111,169 @@ function Complete-WcdProgressStep {
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $ModuleName -StepKey $StepKey -Event 'Finish' -Kind $kind
 }
 
+function Invoke-WcdStep {
+    <#
+    .SYNOPSIS
+        Runs one Step and returns its Result, owning the progress events, the
+        log lines, the try/catch and the Result shape.
+
+    .DESCRIPTION
+        The twelve lines every Module wrote around the one line that does the
+        work. The Result shape was a literal repeated across every Module, and
+        its optional fields - Severity, RemedyKey, RemedyArgs, Applied,
+        RebootPending - had no schema anywhere: a typo in a property name was
+        not an error, the Diagnostic read $null, and the row quietly rendered as
+        a plain success.
+
+        The Action returns nothing when the Step simply worked. When it has
+        something more to say it returns a hashtable, merged over the Result:
+
+          @{ Severity = 'WARNING'; Error = '...'; RemedyKey = 'RequiresAdmin' }
+            a Step that did not run, and why - reported, not failed
+          @{ Severity = 'WARNING'; RemedyKey = 'DiskLowFreeSpace'; RemedyArgs = @('C:') }
+            a severity chosen from what the machine reported, not from a throw
+          @{ Applied = $true }
+            an extra field the Diagnostic reads
+          @{ Log = 'Power: ... skipped, needs Administrator.' }
+            a log line other than -SuccessLog. Not part of the Result.
+
+        Anything the Action emits that is not a hashtable is ignored, so an
+        Action calling a command that writes to the pipeline still means
+        "it worked".
+
+        An Action that throws produces a failed Result carrying -FailureRemedy,
+        unless -OnFailure classifies the error into something more useful.
+
+        Not every Step wants this. A Module that loops over one manifest entry
+        per Step, or one that decides mid-Step which of several Results to
+        record, is clearer written out; see the note in the manual.
+
+    .PARAMETER Module
+        The Module running the Step, for the progress events.
+
+    .PARAMETER Key
+        The Step key. Becomes the Result's Step.
+
+    .PARAMETER Action
+        The work. Returns nothing on success, or a hashtable merged over the
+        Result.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of the Step. Omit for none.
+
+    .PARAMETER SuccessLog
+        INFO line written when the Step succeeded. Omit to write nothing.
+
+    .PARAMETER FailureLabel
+        What the Step is called in the failure log line, which reads
+        '<FailureLabel>: <Error>'.
+
+    .PARAMETER FailureRemedy
+        RemedyKey put on the Result when the Action throws.
+
+    .PARAMETER OnFailure
+        Scriptblock given the caught ErrorRecord, returning a hashtable merged
+        over the failed Result. For a Step whose failures are worth telling
+        apart - a registry key locked by Group Policy is a different sentence to
+        the technician than a registry write that just failed.
+
+    .OUTPUTS
+        [pscustomobject] one Result, with Step, Success, Error and whatever the
+        Action or -OnFailure added.
+
+    .EXAMPLE
+        Invoke-WcdStep -Module 'Config-Power' -Key 'ScreenTimeoutAc' `
+            -LogPath $logPath -ProgressCallback $ProgressCallback `
+            -SuccessLog 'Power: screen timeout on AC set to 15 min.' `
+            -FailureLabel 'Screen timeout on AC' -FailureRemedy 'PowerCfgFailed' `
+            -Action { Invoke-WcdPowerCfg '/change' 'monitor-timeout-ac' '15' }
+
+    .EXAMPLE
+        # A Step that deliberately did not run, reported rather than failed
+        Invoke-WcdStep -Module 'Config-Power' -Key 'ScreenTimeoutAc' -Action {
+            @{ Severity = 'WARNING'; Error = 'powercfg requires Administrator.'
+               RemedyKey = 'RequiresAdmin' }
+        }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Module,
+
+        [Parameter(Mandatory)]
+        [string]$Key,
+
+        [Parameter(Mandatory)]
+        [scriptblock]$Action,
+
+        [string]$LogPath,
+
+        [scriptblock]$ProgressCallback,
+
+        [string]$SuccessLog,
+
+        [string]$FailureLabel,
+
+        [string]$FailureRemedy,
+
+        [scriptblock]$OnFailure
+    )
+
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $Module -StepKey $Key -Event 'Start'
+
+    # Ordered, so a Result reads Step / Success / Error first however many extra
+    # fields a Step adds.
+    $fields = [ordered]@{ Step = $Key; Success = $true; Error = '' }
+    $failed = $false
+
+    try {
+        foreach ($emitted in @(& $Action)) {
+            if ($emitted -isnot [System.Collections.IDictionary]) { continue }
+            foreach ($name in @($emitted.Keys)) { $fields[[string]$name] = $emitted[$name] }
+        }
+    } catch {
+        $failed = $true
+        $fragment = if ($OnFailure) {
+            & $OnFailure $_
+        } else {
+            @{ Error = $_.Exception.Message; RemedyKey = $FailureRemedy }
+        }
+
+        foreach ($emitted in @($fragment)) {
+            if ($emitted -isnot [System.Collections.IDictionary]) { continue }
+            foreach ($name in @($emitted.Keys)) { $fields[[string]$name] = $emitted[$name] }
+        }
+
+        # A Step that threw failed, whatever the classifier said.
+        $fields['Success'] = $false
+    }
+
+    # Log is how a Step says what to write; it is not part of the Result.
+    $logOverride = if ($fields.Contains('Log')) { [string]$fields['Log'] } else { $null }
+    if ($null -ne $logOverride) { $fields.Remove('Log') }
+
+    $result = [pscustomobject]$fields
+
+    if ($failed) {
+        $message = if ($null -ne $logOverride) { $logOverride } else { '{0}: {1}' -f $FailureLabel, [string]$result.Error }
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
+    } else {
+        $message = if ($null -ne $logOverride) { $logOverride } else { $SuccessLog }
+        if (-not [string]::IsNullOrWhiteSpace($message)) {
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
+        }
+    }
+
+    # One place decides the progress kind from the Result, already.
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $Module -StepKey $Key -Results @($result)
+
+    return $result
+}
+
 function Get-WcdHistoryBlock {
     <#
     .SYNOPSIS

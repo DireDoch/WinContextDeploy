@@ -62,6 +62,7 @@ function Set-WcdPowerConfiguration {
     $results = @()
     $moduleName = 'Config-Power'
     $laptopOnly = ($FormFactor -eq 'Laptop')
+    $requiresElevation = -not $Elevated
 
     $steps = @(
         @{ Step = 'ScreenTimeoutBattery'; LaptopOnly = $true;  Log = 'Power: screen timeout on battery set to 10 min.'; Fail = 'Screen timeout on battery'
@@ -89,38 +90,33 @@ function Set-WcdPowerConfiguration {
     foreach ($step in $steps) {
         if ($step.LaptopOnly -and -not $laptopOnly) { continue }
 
-        $key = [string]$step.Step
-        Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Start'
+        # L'Action se cree ici et s'execute dans cette portee, donc elle voit
+        # ces trois variables. Elles sont reaffectees a chaque tour, ce qui est
+        # sans danger: l'Action tourne avant le tour suivant.
+        $powerCfgArguments = @($step.Arguments)
+        $stepLabel = [string]$step.Fail
 
-        if (-not $Elevated) {
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('{0}: skipped, powercfg requires Administrator.' -f $step.Fail)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Finish' -Kind 'warning'
-            $results += [pscustomobject]@{
-                Step      = $key
-                Success   = $true
-                Error     = 'powercfg requires Administrator.'
-                Severity  = 'WARNING'
-                RemedyKey = 'RequiresAdmin'
-            }
-            continue
-        }
+        $results += Invoke-WcdStep -Module $moduleName -Key ([string]$step.Step) `
+            -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+            -SuccessLog ([string]$step.Log) `
+            -FailureLabel $stepLabel -FailureRemedy 'PowerCfgFailed' `
+            -Action {
+                # Unelevated, the Step does not run: it reports what would have
+                # needed Administrator, which is a far more useful diagnostic
+                # than a raw exit code.
+                if ($requiresElevation) {
+                    # [ordered]: le fragment fixe l'ordre des proprietes du
+                    # Resultat, que le rapport JSON reprend tel quel.
+                    return [ordered]@{
+                        Severity  = 'WARNING'
+                        Error     = 'powercfg requires Administrator.'
+                        RemedyKey = 'RequiresAdmin'
+                        Log       = '{0}: skipped, powercfg requires Administrator.' -f $stepLabel
+                    }
+                }
 
-        try {
-            $powerCfgArguments = @($step.Arguments)
-            Invoke-WcdPowerCfg @powerCfgArguments
-            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ([string]$step.Log)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Finish' -Kind 'success'
-            $results += [pscustomobject]@{ Step = $key; Success = $true; Error = '' }
-        } catch {
-            Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ('{0}: {1}' -f $step.Fail, $_.Exception.Message)
-            Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey $key -Event 'Finish' -Kind 'error'
-            $results += [pscustomobject]@{
-                Step      = $key
-                Success   = $false
-                Error     = $_.Exception.Message
-                RemedyKey = 'PowerCfgFailed'
+                Invoke-WcdPowerCfg @powerCfgArguments
             }
-        }
     }
 
     return $results
