@@ -358,6 +358,7 @@ docs/
 src/
   Invoke-WcdConfiguration.ps1     <- orchestrator
   WcdHelpers.ps1                  <- shared functions
+  WcdDiagnostic.ps1               <- the end-of-run report
   Config-*.ps1                    <- configuration modules
 tests/
   *.Tests.ps1                     <- Pester tests
