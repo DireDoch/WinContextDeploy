@@ -1296,9 +1296,9 @@ report and a remediation sentence when it fails — for free, because
     }
     step(0, [1], [Create `src/Config-MyThing.ps1` from the template below.])
     step(-1.2, [2], [Write your work in zone 4, and pick a `Step` key for it.])
-    step(-2.7, [3], [Register it: the module list and its dispatch case, a
-      progress-plan entry, a step label, and a checklist row in both languages.],
-      h: 1.5)
+    step(-2.7, [3], [Add the descriptor at the bottom of the same file. That is
+      the whole registration - nothing outside this file learns your module's
+      name.], h: 1.5)
     step(-4.2, [4], [Add `tests/Config-MyThing.Tests.ps1` and run the suite.])
     arrow((0, -0.35), (0, -0.85))
     arrow((0, -1.55), (0, -2.3))
@@ -1390,48 +1390,112 @@ function Set-WcdMyThingConfiguration {
   ```
 ]
 
-== Registering it
+== Declaring it
 
-Four small edits, all in files you already have.
-
-*In `src/Invoke-WcdConfiguration.ps1`* — add it to the module list and give it a
-dispatch case:
+The orchestrator finds your module by globbing `src/Config-*.ps1`. It does not
+hold a list of modules, a dispatch table, a progress plan or a checklist layout,
+so there is nothing to add to any of them. Your module says what it is, once, at
+the bottom of its own file:
 
 ```powershell
-$modules = @(
-    # ... the existing ones ...
-    @{ Name = 'Config-MyThing'; File = 'Config-MyThing.ps1' }
-)
+function Get-WcdMyThingDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-MyThing contributes to the run.
 
-# and, in the switch:
-'Config-MyThing' {
-    $modResults = @(Set-WcdMyThingConfiguration -LogPath $resolvedLogPath `
-        -ProgressCallback $progressCallback)
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdMyThingDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    return [pscustomobject]@{
+        Name     = 'Config-MyThing'
+        Order    = 125          # run order
+        RowOrder = 125          # position of its rows in the checklist
+        Steps    = @(
+            @{ Key = 'MyStep'; Label = 'My thing' }
+        )
+        Rows     = @(
+            @{ Label = $Translations.Checklist.MyThing; Steps = @('MyStep') }
+        )
+        Invoke   = {
+            param($ctx)
+
+            Set-WcdMyThingConfiguration -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
 }
 ```
 
-*In `src/WcdHelpers.ps1`* — tell the progress bar how many steps to expect, and
-give the step a readable name:
+The function name is derived from the file name: `Config-MyThing.ps1` must
+export `Get-WcdMyThingDescriptor`. Get it wrong, or leave a field out, and the
+run stops at startup naming what is missing — `Test-WcdModuleDescriptor` in
+`WcdHelpers.ps1` holds the contract, and `tests/ModuleDescriptor.Tests.ps1` runs
+every module through it.
 
-```powershell
-# in Get-WcdModuleProgressPlan
-'Config-MyThing' = @('MyStep')
+=== What each field is for
 
-# in Get-WcdTechnicalStepLabels
-'MyStep' = 'My thing'
-```
+#table(
+  columns: (auto, 1fr),
+  stroke: none,
+  align: (left, left),
+  inset: (x: 5pt, y: 6pt),
+  fill: (_, row) => if calc.odd(row) { greyLight },
+  table.header(
+    text(weight: "bold")[Field], text(weight: "bold")[What it does],
+  ),
+  [`Name`], [Must match the file name. The by-module diagnostic shows it.],
+  [`Order`], [Run order. Pick a gap between two existing modules.],
+  [`RowOrder`], [Where your rows land in the technician's checklist. Independent
+    of `Order`: the checklist is grouped for reading, not for running.],
+  [`Steps`], [Every Step key your module can report, with its label. A Step
+    carrying `Planned = $false` is declared but not counted — that is how a Step
+    filtered out by Form Factor, or one you only report on failure, keeps its
+    label without making the progress bar overshoot. An empty `Steps` array
+    means "nothing to do this run": the module is skipped, and its rows still
+    appear.],
+  [`Rows`], [Checklist rows. `@{ Label; Steps }` takes its status from the
+    Results those Steps produced. `@{ Label; Kind; Detail }` states a fixed
+    fact instead. Add `MissingKind` / `MissingDetail` to say what a row means
+    when nothing reported, or `OmitWhenMissing = $true` to drop the row
+    entirely in that case.],
+  [`Invoke`], [`param($ctx)`, returns your Results. `$ctx` carries
+    `ExecutionOptions`, `Config`, `Translations`, `DomainTarget`, `Elevated`,
+    `LogPath` and `ProgressCallback` — everything a module is allowed to need,
+    so no module reaches into the orchestrator's variables.],
+)
 
-*Back in `src/Invoke-WcdConfiguration.ps1`* — add a checklist row and its label in
-*both* translation tables:
+#tip[
+  The one thing still outside your file is the row label. `$Translations.Checklist.MyThing`
+  has to exist in *both* `$T` tables in `src/Invoke-WcdConfiguration.ps1`, or
+  the row renders blank in one language. `tests/Translations.Tests.ps1` fails
+  when you add it to one table and forget the other.
 
-```powershell
-# in both $T tables, inside Checklist
-MyThing = 'My thing'          # 'Mon truc' in the French table
-
-# in Get-WcdFinalChecklistEntries
-$entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.MyThing `
-    -ResultLookup $lookup -StepKeys @('MyStep') -StepLabels $StepLabels
-```
+  You can skip that and write the label as a literal string in the descriptor —
+  but then it says the same thing to a French technician as to an English one.
+]
 
 == Testing it
 

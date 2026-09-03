@@ -454,46 +454,166 @@ function Write-WcdSectionHeader {
     Write-Host '===============================================' -ForegroundColor Cyan
 }
 
+function Resolve-WcdDescriptorRow {
+    <#
+    .SYNOPSIS
+        Turns one descriptor row into a checklist entry.
+
+    .DESCRIPTION
+        A row either states a fixed fact - an Application Target the Environment
+        filtered out, a Manual Step - or it is backed by Steps and takes its kind
+        from their Results.
+
+        A row carrying OmitWhenMissing disappears when its Steps produced
+        nothing. That is for a Step a Module reports only when something went
+        wrong: Config-Applications raises WingetUnavailable when the probe fails
+        and stays silent otherwise, and a silent probe should not leave a row.
+
+    .PARAMETER Row
+        One entry from a descriptor's Rows array.
+
+    .PARAMETER ResultLookup
+        Step key -> Results.
+
+    .PARAMETER StepLabels
+        Step key -> label.
+
+    .OUTPUTS
+        [pscustomobject] one checklist entry, or nothing when the row is omitted.
+
+    .EXAMPLE
+        Resolve-WcdDescriptorRow -Row $descriptor.Rows[0] -ResultLookup $lookup -StepLabels $labels
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Row,
+
+        [Parameter(Mandatory)]
+        [hashtable]$ResultLookup,
+
+        [Parameter(Mandatory)]
+        [hashtable]$StepLabels
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$Row.Kind)) {
+        return New-WcdDiagnosticEntry -Label ([string]$Row.Label) -Kind ([string]$Row.Kind) `
+            -Detail ([string]$Row.Detail) -Step ([string]$Row.Step)
+    }
+
+    $stepKeys = @(@($Row.Steps) | ForEach-Object { [string]$_ })
+
+    if ($Row.OmitWhenMissing) {
+        $found = @(Get-WcdResultsForSteps -ResultLookup $ResultLookup -StepKeys $stepKeys)
+        if ($found.Count -eq 0) { return }
+    }
+
+    $arguments = @{
+        Label        = [string]$Row.Label
+        ResultLookup = $ResultLookup
+        StepKeys     = $stepKeys
+        StepLabels   = $StepLabels
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Row.MissingKind))   { $arguments['MissingKind'] = [string]$Row.MissingKind }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Row.MissingDetail)) { $arguments['MissingDetail'] = [string]$Row.MissingDetail }
+
+    return Resolve-WcdAutomaticEntry @arguments
+}
+
+function Resolve-WcdRestartEntry {
+    <#
+    .SYNOPSIS
+        Raises the restart row when, and only when, something is waiting on one.
+
+    .DESCRIPTION
+        The tool never restarts the machine: a reboot mid-run would destroy the
+        checklist, the history log and the JSON report. So it says so instead.
+
+        The row is raised from Results across two Modules, which is why it
+        belongs to no descriptor. An update waiting on a restart needs the same
+        restart a rename does, so the row is raised once and names whichever
+        causes apply - two restart rows would read as two restarts.
+
+        Applied, not merely successful: renaming a machine to the name it
+        already has succeeds without changing anything a restart takes effect
+        for.
+
+    .PARAMETER ResultLookup
+        Step key -> Results.
+
+    .OUTPUTS
+        [pscustomobject] the restart entry, or nothing when no restart is pending.
+
+    .EXAMPLE
+        Resolve-WcdRestartEntry -ResultLookup $lookup
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$ResultLookup
+    )
+
+    $identityApplied = @(Get-WcdResultsForSteps -ResultLookup $ResultLookup -StepKeys @('ComputerName', 'DomainJoin') |
+        Where-Object { $_.Applied })
+    $updateRebootPending = @(Get-WcdResultsForSteps -ResultLookup $ResultLookup -StepKeys @('WindowsUpdateReboot') |
+        Where-Object { $_.RebootPending })
+
+    if ($identityApplied.Count -eq 0 -and $updateRebootPending.Count -eq 0) { return }
+
+    $detail = if ($identityApplied.Count -gt 0 -and $updateRebootPending.Count -gt 0) {
+        $T.RestartBothManualDetail
+    } elseif ($updateRebootPending.Count -gt 0) {
+        $T.RestartUpdateManualDetail
+    } else {
+        $T.RestartManualDetail
+    }
+
+    return New-WcdDiagnosticEntry -Label $T.Checklist.RestartNeeded -Kind 'manual' -Detail $detail
+}
+
 function Get-WcdFinalChecklistEntries {
     <#
     .SYNOPSIS
-        Builds the technician's checklist: every Step, in the order it was run.
+        Builds the technician's checklist from the Modules' descriptors.
 
     .DESCRIPTION
         The one place the run is turned into what the technician reads, and the
         source the JSON report is built from, so the two can never disagree.
 
-        An Application Target filtered out by the current Environment or Form
-        Factor is reported Not Applicable rather than omitted, so it is visible
-        that it was considered. Targets skipped because the technician declined the
-        prompt become Manual Steps. Printers are automatic when the manifest
-        declares queues and a Manual Step when it does not.
+        Every row comes from a descriptor, in RowOrder. Two things do not,
+        because they belong to no single Module:
+
+        - the restart row, raised from Results across Config-Identity and
+          Config-WindowsUpdate, which sits between the identity rows and the
+          rest of the checklist;
+        - the trailing Manual Steps, work WinContextDeploy deliberately does not
+          automate. Printers join them when the manifest declares no queue,
+          which is also when Config-Printer plans nothing and is skipped.
 
     .PARAMETER AllResults
         Every Result produced by the run.
 
-    .PARAMETER ExecutionOptions
-        Resolved run options, used to pick the Steps that apply.
+    .PARAMETER Descriptors
+        Every Module descriptor for this run, from Get-Wcd*Descriptor.
 
     .PARAMETER StepLabels
         Step key -> label.
 
     .PARAMETER Config
-        The imported manifest.
+        The imported manifest, for the printers-are-manual rule.
 
     .OUTPUTS
         [pscustomobject[]] with Step, Label, Kind and Detail.
 
     .EXAMPLE
-        Get-WcdFinalChecklistEntries -AllResults $results -ExecutionOptions $options `
+        Get-WcdFinalChecklistEntries -AllResults $results -Descriptors $descriptors `
             -StepLabels $labels -Config $config
     #>
     [CmdletBinding()]
     param(
         [object[]]$AllResults = @(),
 
-        [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions,
+        [object[]]$Descriptors = @(),
 
         [Parameter(Mandatory)]
         [hashtable]$StepLabels,
@@ -508,123 +628,25 @@ function Get-WcdFinalChecklistEntries {
         $lookup[$result.Step] += $result
     }
 
+    # Rows are emitted for every Module, including one the run skipped: a
+    # declined rename still owes the technician a Manual Step saying so.
     $entries = @()
-    $applicationsSkipped = $lookup.ContainsKey('ApplicationsSkip')
+    $restartRowOrder = 15
+    $restartRaised = $false
 
-    # --- Machine identity -----------------------------------------------------
-    # Declining is a choice, not a filter, so both rows are Manual Steps rather
-    # than Not Applicable - which also lets a fleet-wide report show which
-    # machines are still unnamed.
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.ComputerName -ResultLookup $lookup `
-        -StepKeys @('ComputerName') -StepLabels $StepLabels `
-        -MissingKind 'manual' -MissingDetail $T.IdentityManualDetail
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DomainJoin -ResultLookup $lookup `
-        -StepKeys @('DomainJoin') -StepLabels $StepLabels `
-        -MissingKind 'manual' -MissingDetail $T.IdentityManualDetail
-
-    # The tool never restarts the machine: a reboot mid-run would destroy the
-    # checklist, the history log and the JSON report. So it says so instead,
-    # but only when there is actually something waiting on a restart.
-    # Applied, not merely successful: renaming a machine to the name it already
-    # has succeeds without changing anything a restart would take effect for.
-    $identityApplied = @(Get-WcdResultsForSteps -ResultLookup $lookup -StepKeys @('ComputerName', 'DomainJoin') |
-        Where-Object { $_.Applied })
-    # An update waiting on a restart needs the same restart the rename does, so
-    # the row is raised once and names whichever causes apply. Two restart rows
-    # would read as two restarts.
-    $updateRebootPending = @(Get-WcdResultsForSteps -ResultLookup $lookup -StepKeys @('WindowsUpdateReboot') |
-        Where-Object { $_.RebootPending })
-    if ($identityApplied.Count -gt 0 -or $updateRebootPending.Count -gt 0) {
-        $restartDetail = if ($identityApplied.Count -gt 0 -and $updateRebootPending.Count -gt 0) {
-            $T.RestartBothManualDetail
-        } elseif ($updateRebootPending.Count -gt 0) {
-            $T.RestartUpdateManualDetail
-        } else {
-            $T.RestartManualDetail
+    foreach ($descriptor in @(@($Descriptors) | Sort-Object { [int]$_.RowOrder })) {
+        if (-not $restartRaised -and [int]$descriptor.RowOrder -ge $restartRowOrder) {
+            $entries += Resolve-WcdRestartEntry -ResultLookup $lookup
+            $restartRaised = $true
         }
 
-        $entries += New-WcdDiagnosticEntry -Label $T.Checklist.RestartNeeded -Kind 'manual' -Detail $restartDetail
-    }
-
-    # --- OS configuration, in the order the modules run -----------------------
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Taskbar -ResultLookup $lookup `
-        -StepKeys @('TaskbarAlignLeft', 'DisableTaskView') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Language -ResultLookup $lookup `
-        -StepKeys @('DisplayLanguage') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Keyboard -ResultLookup $lookup `
-        -StepKeys @('KeyboardLayout') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Decimal -ResultLookup $lookup `
-        -StepKeys @('DecimalAndCurrency') -StepLabels $StepLabels
-
-    $powerStepKeys = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
-        @('ScreenTimeoutBattery', 'ScreenTimeoutAc', 'LidActionAcNone', 'LidActionBatteryNone', 'SetActiveSchemeCurrent')
-    } else {
-        @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
-    }
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Power -ResultLookup $lookup `
-        -StepKeys $powerStepKeys -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DeviceManager -ResultLookup $lookup `
-        -StepKeys @('DeviceManagerStatus') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DiskHealth -ResultLookup $lookup `
-        -StepKeys @('DiskHealth') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.DiskFreeSpace -ResultLookup $lookup `
-        -StepKeys @('DiskFreeSpace') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Tpm -ResultLookup $lookup `
-        -StepKeys @('TpmReadiness') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.BitLocker -ResultLookup $lookup `
-        -StepKeys @('BitLockerStatus') -StepLabels $StepLabels
-    # One row for both update Steps: a failed update and a pending restart are
-    # the same conversation with the technician, and the restart itself is asked
-    # for once, in the restart row above.
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.WindowsUpdate -ResultLookup $lookup `
-        -StepKeys @('WindowsUpdateHistory', 'WindowsUpdateReboot') -StepLabels $StepLabels
-    $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Network -ResultLookup $lookup `
-        -StepKeys @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') -StepLabels $StepLabels
-
-    # --- Application Targets, in manifest order -------------------------------
-    # Targets excluded by the current Environment are reported Not Applicable
-    # rather than omitted, so the technician can see they were considered.
-    $selected = @(Get-WcdApplicationTarget -Config $Config `
-        -Environment $ExecutionOptions.Environment `
-        -FormFactor $ExecutionOptions.FormFactor `
-        -OptionalTools $ExecutionOptions.OptionalTools |
-        ForEach-Object { [string]$_.Step })
-
-    # Config-Applications reports the winget probe once, and only when the
-    # manifest has CheckWinget entries at all.
-    if ($lookup.ContainsKey('WingetUnavailable')) {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Winget -ResultLookup $lookup `
-            -StepKeys @('WingetUnavailable') -StepLabels $StepLabels
-    }
-
-    foreach ($entry in @($Config.Applications)) {
-        $step = [string]$entry.Step
-        $name = [string]$entry.Name
-
-        if (@($selected) -notcontains $step) {
-            # Prompt entries the technician declined are simply not shown.
-            if ($entry.Prompt) { continue }
-            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'na' -Detail $T.SecondaryNA -Step $step
-            continue
+        foreach ($row in @($descriptor.Rows)) {
+            $entries += Resolve-WcdDescriptorRow -Row $row -ResultLookup $lookup -StepLabels $StepLabels
         }
-
-        if ($applicationsSkipped) {
-            $entries += New-WcdDiagnosticEntry -Label $name -Kind 'manual' -Detail $T.ApplicationManualDetail -Step $step
-            continue
-        }
-
-        $entries += Resolve-WcdAutomaticEntry -Label $name -ResultLookup $lookup `
-            -StepKeys @($step) -StepLabels $StepLabels
     }
 
-    # --- Printers ------------------------------------------------------------
-    # Declared in the manifest: the Module connects them and reports per queue.
-    # None declared: they stay a Manual Step, as they were before.
-    $printerTargets = @(Get-WcdPrinterTarget -Config $Config)
-    if ($printerTargets.Count -gt 0) {
-        $entries += Resolve-WcdAutomaticEntry -Label $T.Checklist.Printers -ResultLookup $lookup `
-            -StepKeys @($printerTargets | ForEach-Object { Get-WcdPrinterStepKey -Name ([string]$_.Name) }) `
-            -StepLabels $StepLabels
+    if (-not $restartRaised) {
+        $entries += Resolve-WcdRestartEntry -ResultLookup $lookup
     }
 
     # --- Deliberately manual: WinContextDeploy does not automate these --------
@@ -636,7 +658,7 @@ function Get-WcdFinalChecklistEntries {
         $T.Checklist.Desktop,
         $T.Checklist.Favorites
     )
-    if ($printerTargets.Count -eq 0) { $manualLabels += $T.Checklist.Printers }
+    if (@(Get-WcdPrinterTarget -Config $Config).Count -eq 0) { $manualLabels += $T.Checklist.Printers }
 
     foreach ($manualLabel in $manualLabels) {
         $entries += New-WcdDiagnosticEntry -Label $manualLabel -Kind 'manual' -Detail $T.StandardManualDetail

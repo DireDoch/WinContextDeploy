@@ -125,3 +125,74 @@ function Set-WcdPowerConfiguration {
 
     return $results
 }
+
+function Get-WcdPowerDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-Power contributes to the run.
+
+    .DESCRIPTION
+        Five Steps on a Laptop and two on a Desktop. The battery and lid Steps are
+        Not Applicable to a Desktop, so they are declared but not planned - the
+        label survives for the diagnostic, the progress bar cannot overshoot.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdPowerDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    $laptop = ($ExecutionOptions.FormFactor -eq 'Laptop')
+
+    $steps = @(
+        @{ Key = 'ScreenTimeoutBattery';   Label = 'Screen timeout on battery';       Planned = $laptop }
+        @{ Key = 'ScreenTimeoutAc';        Label = 'Screen timeout on AC';            Planned = $true }
+        @{ Key = 'LidActionAcNone';        Label = 'Lid close on AC: do nothing';     Planned = $laptop }
+        @{ Key = 'LidActionBatteryNone';   Label = 'Lid close on battery: do nothing'; Planned = $laptop }
+        @{ Key = 'SetActiveSchemeCurrent'; Label = 'Active power scheme';             Planned = $true }
+    )
+
+    return [pscustomobject]@{
+        Name     = 'Config-Power'
+        Order    = 20
+        RowOrder = 50
+        Steps    = $steps
+        Rows     = @(
+            @{ Label = $Translations.Checklist.Power
+               Steps = @($steps | Where-Object { $_.Planned } | ForEach-Object { $_.Key }) }
+        )
+        Invoke   = {
+            param($ctx)
+
+            Set-WcdPowerConfiguration -FormFactor $ctx.ExecutionOptions.FormFactor -Elevated $ctx.Elevated `
+                -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
+}

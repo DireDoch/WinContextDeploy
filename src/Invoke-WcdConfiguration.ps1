@@ -248,7 +248,6 @@ $T = if ($ScriptUI -eq 'EN') {
         DeskWindowsDetail       = 'Must be done manually on the Windows desktop.'
         StepCount               = 'step(s)'
         ModuleResult            = '  Result: {0} ({1} steps, {2} failures, {3} warnings, {4:N0}ms)'
-        ModuleNotFound          = 'Module not found: {0}'
         ModuleLoadFail          = 'Failed to load module {0}: {1}'
         StatusCrash             = 'CRASH'
         StatusPartial           = 'PARTIAL'
@@ -423,7 +422,6 @@ $T = if ($ScriptUI -eq 'EN') {
         DeskWindowsDetail       = 'A faire manuellement sur le bureau Windows.'
         StepCount               = 'etape(s)'
         ModuleResult            = '  Resultat: {0} ({1} etapes, {2} echecs, {3} avertissements, {4:N0}ms)'
-        ModuleNotFound          = 'Module introuvable: {0}'
         ModuleLoadFail          = 'Echec chargement module {0}: {1}'
         StatusCrash             = 'CRASH'
         StatusPartial           = 'PARTIEL'
@@ -1184,71 +1182,75 @@ if (-not [string]::IsNullOrWhiteSpace($HistoryLogPath)) {
     Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ("HistoryLogPath: {0}" -f $HistoryLogPath)
 }
 
-# --- Modules to run, in order ---
-$modules = @(
-    @{ Name = 'Config-Identity';      File = 'Config-Identity.ps1' },
-    @{ Name = 'Config-Power';         File = 'Config-Power.ps1' },
-    @{ Name = 'Config-Decimal';       File = 'Config-Decimal.ps1' },
-    @{ Name = 'Config-TaskbarLeft';   File = 'Config-TaskbarLeft.ps1' },
-    @{ Name = 'Config-Language';      File = 'Config-Language.ps1' },
-    @{ Name = 'Config-Applications';  File = 'Config-Applications.ps1' },
-    @{ Name = 'Config-DeviceManager'; File = 'Config-DeviceManager.ps1' },
-    @{ Name = 'Config-Disk';          File = 'Config-Disk.ps1' },
-    @{ Name = 'Config-BitLocker';     File = 'Config-BitLocker.ps1' },
-    @{ Name = 'Config-WindowsUpdate'; File = 'Config-WindowsUpdate.ps1' },
-    @{ Name = 'Config-Network';       File = 'Config-Network.ps1' },
-    @{ Name = 'Config-Printer';       File = 'Config-Printer.ps1' }
-)
-
-$identityDomainName = if ($null -ne $domainTarget) { [string]$domainTarget.Name } else { '' }
-$identityOUPath = if ($null -ne $domainTarget) { [string]$domainTarget.OUPath } else { '' }
-
-$stepLabels = Get-WcdTechnicalStepLabels -Config $script:WcdConfig
-$moduleStepPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $script:WcdConfig
-$allResults = @()
+# --- Discover the Modules ----------------------------------------------------
+# Every src/Config-*.ps1 declares itself with one descriptor function. Nothing
+# about a Module is registered here: not its run order, not its Steps, not its
+# checklist rows. Adding a Module is adding a file.
+#
+# A Module that cannot be loaded is reported and the run continues - the rest of
+# the checklist still helps the technician. A Module that loads but does not
+# declare itself is a repo bug, not a machine condition, so it stops the run
+# loudly rather than vanishing from the checklist.
+$descriptors = @()
 $moduleStatus = @()
 
-foreach ($mod in $modules) {
-    $modPath = Join-Path $scriptDir $mod.File
-    $modName = $mod.Name
-
-    # Nothing planned means nothing declared in the manifest: skip the Module
-    # entirely rather than report an empty run of it.
-    if ($moduleStepPlan.ContainsKey($modName) -and @($moduleStepPlan[$modName]).Count -eq 0) {
-        continue
-    }
-
-    # The module file must exist
-    if (-not (Test-Path -LiteralPath $modPath)) {
-        $msg = ($T.ModuleNotFound -f $modPath)
-        Write-Host "  [ERREUR] $msg" -ForegroundColor Red
-        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $msg
-        $moduleStatus += [pscustomobject]@{
-            Module         = $modName
-            Status         = $T.StatusError
-            Steps          = 0
-            Failures       = 1
-            Warnings       = 0
-            Detail         = $msg
-        }
-        continue
-    }
-
-    # Load the module (dot-source)
+foreach ($moduleFile in @(Get-ChildItem -Path (Join-Path $scriptDir 'Config-*.ps1') | Sort-Object Name)) {
     try {
-        . $modPath
+        . $moduleFile.FullName
     } catch {
-        $msg = ($T.ModuleLoadFail -f $modName, $_.Exception.Message)
+        $msg = ($T.ModuleLoadFail -f $moduleFile.BaseName, $_.Exception.Message)
         Write-Host "  [ERREUR] $msg" -ForegroundColor Red
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $msg
         $moduleStatus += [pscustomobject]@{
-            Module         = $modName
+            Module         = $moduleFile.BaseName
             Status         = $T.StatusError
             Steps          = 0
             Failures       = 1
             Warnings       = 0
             Detail         = $msg
         }
+        continue
+    }
+
+    $descriptorFunction = 'Get-Wcd{0}Descriptor' -f ($moduleFile.BaseName -replace '^Config-', '')
+    if (-not (Get-Command -Name $descriptorFunction -ErrorAction SilentlyContinue)) {
+        throw ('{0} does not define {1}. See Test-WcdModuleDescriptor in WcdHelpers.ps1.' -f $moduleFile.Name, $descriptorFunction)
+    }
+
+    $descriptor = & $descriptorFunction -ExecutionOptions $executionOptions -Config $script:WcdConfig -Translations $T
+    $problems = @(Test-WcdModuleDescriptor -Descriptor $descriptor -ExpectedName $moduleFile.BaseName)
+    if ($problems.Count -gt 0) {
+        throw ('{0} returned an invalid descriptor: {1}' -f $descriptorFunction, ($problems -join ' '))
+    }
+
+    $descriptors += $descriptor
+}
+
+$descriptors = @($descriptors | Sort-Object { [int]$_.Order })
+
+$stepLabels = Get-WcdTechnicalStepLabels -Descriptors $descriptors
+$moduleStepPlan = Get-WcdModuleProgressPlan -Descriptors $descriptors
+$allResults = @()
+
+# Everything a Module's Invoke block is allowed to need, so no Module reaches
+# back into this script's variables.
+$moduleContext = [pscustomobject]@{
+    ExecutionOptions = $executionOptions
+    Config           = $script:WcdConfig
+    Translations     = $T
+    DomainTarget     = $domainTarget
+    Elevated         = $isElevated
+    LogPath          = $resolvedLogPath
+    ProgressCallback = $null
+}
+
+foreach ($descriptor in $descriptors) {
+    $modName = [string]$descriptor.Name
+
+    # Nothing planned means nothing to do this run - no printer in the manifest,
+    # no identity change asked for. Skip the Module rather than report an empty
+    # run of it. Its checklist rows are still emitted.
+    if (@($moduleStepPlan[$modName]).Count -eq 0) {
         continue
     }
 
@@ -1262,57 +1264,10 @@ foreach ($mod in $modules) {
 
         Update-WcdProgressState -State $progressState -StepKey $eventData.Step -Event $eventData.Event
     }
+    $moduleContext.ProgressCallback = $progressCallback
 
     try {
-        switch ($modName) {
-            'Config-Identity' {
-                $modResults = @(Set-WcdMachineIdentity `
-                    -NewComputerName $executionOptions.NewComputerName `
-                    -JoinDomain $executionOptions.JoinDomain `
-                    -DomainName $identityDomainName `
-                    -OUPath $identityOUPath `
-                    -Elevated $isElevated `
-                    -PromptMessage ($T.CredentialPrompt -f $identityDomainName) `
-                    -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Power' {
-                $modResults = @(Set-WcdPowerConfiguration -FormFactor $executionOptions.FormFactor -Elevated $isElevated -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Decimal' {
-                $modResults = @(Set-WcdDecimalConfiguration -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-TaskbarLeft' {
-                $modResults = @(Set-WcdTaskbarLeft -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Language' {
-                $modResults = @(Set-WcdLanguageConfiguration -Culture $executionOptions.Language -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Applications' {
-                $targets = @(Get-WcdApplicationTarget -Config $script:WcdConfig `
-                    -Environment $executionOptions.Environment `
-                    -FormFactor $executionOptions.FormFactor `
-                    -OptionalTools $executionOptions.OptionalTools)
-                $modResults = @(Set-WcdApplicationsConfiguration -Targets $targets -OpenApps $executionOptions.OpenApps -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-DeviceManager' {
-                $modResults = @(Set-WcdDeviceManagerStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Disk' {
-                $modResults = @(Set-WcdDiskStatus -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-BitLocker' {
-                $modResults = @(Set-WcdBitLockerStatus -Elevated $isElevated -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-WindowsUpdate' {
-                $modResults = @(Set-WcdWindowsUpdateStatus -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Network' {
-                $modResults = @(Set-WcdNetworkDiagnostics -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-            'Config-Printer' {
-                $modResults = @(Set-WcdPrinterConfiguration -Config $script:WcdConfig -LogPath $resolvedLogPath -ProgressCallback $progressCallback)
-            }
-        }
+        $modResults = @(& $descriptor.Invoke $moduleContext)
     } catch {
         $modError = $_.Exception.Message
         Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message ("Module ${modName} crashed: {0}" -f $modError)
@@ -1362,7 +1317,7 @@ foreach ($mod in $modules) {
 }
 
 $diagnosticResults = @($allResults)
-$checklistEntries = Get-WcdFinalChecklistEntries -AllResults $diagnosticResults -ExecutionOptions $executionOptions -StepLabels $stepLabels -Config $script:WcdConfig
+$checklistEntries = Get-WcdFinalChecklistEntries -AllResults $diagnosticResults -Descriptors $descriptors -StepLabels $stepLabels -Config $script:WcdConfig
 $checklistSuccessCount = @($checklistEntries | Where-Object { $_.Kind -eq 'success' }).Count
 $checklistWarningCount = @($checklistEntries | Where-Object { $_.Kind -eq 'warning' }).Count
 $checklistErrorCount = @($checklistEntries | Where-Object { $_.Kind -eq 'error' }).Count

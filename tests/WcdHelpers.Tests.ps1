@@ -8,6 +8,26 @@ Describe 'WcdHelpers' {
         }
 
         . $helpersPath
+
+        # Les assembleurs ne connaissent plus aucun Module: ils assemblent des
+        # descripteurs. On charge donc les vrais Config-*.ps1 et on appelle
+        # leurs vrais descripteurs, plutot que d'en recopier une version qui
+        # derive du jour ou quelqu'un ajoute une Etape.
+        foreach ($module in @('Config-Power', 'Config-Applications', 'Config-Language', 'Config-Network', 'Config-Printer')) {
+            . (Join-Path $srcDir ('{0}.ps1' -f $module))
+        }
+
+        $script:Translations = @{ Checklist = @{} }
+
+        function New-TestDescriptor {
+            param([string[]]$Module, [hashtable]$Config = @{}, [pscustomobject]$ExecutionOptions)
+
+            return @($Module | ForEach-Object {
+                & ('Get-Wcd{0}Descriptor' -f ($_ -replace '^Config-', '')) `
+                    -ExecutionOptions $ExecutionOptions -Config $Config -Translations $script:Translations
+            })
+        }
+
         $script:PesterMajorVersion = (Get-Module -Name Pester | Select-Object -First 1).Version.Major
     }
 
@@ -109,7 +129,8 @@ Describe 'WcdHelpers' {
             OptionalTools = @()
         }
 
-        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $config
+        $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor `
+            -Module @('Config-Power', 'Config-Applications') -Config $config -ExecutionOptions $executionOptions)
 
         $plan['Config-Power'] | Should -Be @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
         # les cibles filtrees par environnement ne comptent pas dans la progression
@@ -122,15 +143,20 @@ Describe 'WcdHelpers' {
             FormFactor = 'Laptop'; Environment = 'Workstation'; OpenApps = $false; OptionalTools = @()
         }
 
-        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $config
+        $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor `
+            -Module @('Config-Applications') -Config $config -ExecutionOptions $executionOptions)
 
         $plan['Config-Applications'] | Should -Be @('ApplicationsSkip')
     }
 
     It 'nomme les etapes applicatives d apres le manifeste' {
         $config = @{ Applications = @(@{ Step = 'AppCustom'; Name = 'Our LOB app'; Action = 'Launch'; Target = 'lob.exe' }) }
+        $executionOptions = [pscustomobject]@{
+            FormFactor = 'Laptop'; Environment = 'Workstation'; OpenApps = $true; OptionalTools = @()
+        }
 
-        $labels = Get-WcdTechnicalStepLabels -Config $config
+        $labels = Get-WcdTechnicalStepLabels -Descriptors (New-TestDescriptor `
+            -Module @('Config-Applications', 'Config-Language') -Config $config -ExecutionOptions $executionOptions)
 
         $labels['AppCustom'] | Should -Be 'Our LOB app'
         # les etapes systeme gardent leurs libelles integres
@@ -247,12 +273,14 @@ Describe 'WcdHelpers' {
             FormFactor = 'Laptop'; Environment = 'Workstation'; OpenApps = $true; OptionalTools = @()
         }
 
-        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config $config
+        $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor `
+            -Module @('Config-Network', 'Config-Printer') -Config $config -ExecutionOptions $executionOptions)
 
         $plan['Config-Network'] | Should -Be @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
         $plan['Config-Printer'] | Should -Be @('PrinterFloor4Colour')
         # sans imprimante declaree, le module n a rien a faire
-        $emptyPlan = Get-WcdModuleProgressPlan -ExecutionOptions $executionOptions -Config @{ Printers = @() }
+        $emptyPlan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor `
+            -Module @('Config-Printer') -Config @{ Printers = @() } -ExecutionOptions $executionOptions)
         @($emptyPlan['Config-Printer']).Count | Should -Be 0
     }
 }

@@ -600,3 +600,65 @@ function Set-WcdNetworkDiagnostics {
 
     return $results
 }
+
+function Get-WcdNetworkDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-Network contributes to the run.
+
+    .DESCRIPTION
+        Three Steps folded into one row: the technician reads the network as one thing.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdNetworkDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    return [pscustomobject]@{
+        Name     = 'Config-Network'
+        Order    = 110
+        RowOrder = 100
+        Steps    = @(
+            @{ Key = 'NetworkAdapterStatus';  Label = 'Network adapters' }
+            @{ Key = 'NetworkPing8888';       Label = 'Connectivity test' }
+            @{ Key = 'RefreshNetworkPlaces';  Label = 'Refresh network places' }
+        )
+        Rows     = @(
+            @{ Label = $Translations.Checklist.Network
+               Steps = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') }
+        )
+        Invoke   = {
+            param($ctx)
+
+            Set-WcdNetworkDiagnostics -Config $ctx.Config -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
+}

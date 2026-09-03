@@ -523,73 +523,152 @@ function Get-WcdPrinterStepKey {
     return ('Printer{0}' -f $safe)
 }
 
+function Test-WcdModuleDescriptor {
+    <#
+    .SYNOPSIS
+        Checks one Module descriptor against the contract, returning what is wrong.
+
+    .DESCRIPTION
+        A Module declares itself with a descriptor instead of six registration
+        edits scattered across the orchestrator and the helpers. Nothing else
+        enforces the shape, and a descriptor missing a field would fail silently
+        - a Module absent from the progress plan used to run with a $null step
+        list, and a missing checklist label rendered a blank row.
+
+        So this is the guard. The orchestrator throws on anything it returns,
+        and tests/ModuleDescriptor.Tests.ps1 runs every Module through it.
+
+        Contract:
+          Name      [string]      matches the Config-*.ps1 file it came from
+          Order     [int]         run order
+          RowOrder  [int]         position of its rows in the checklist
+          Steps     [object[]]    @{ Key; Label; Planned = $true }; may be empty,
+                                  which means "skip this Module entirely"
+          Rows      [object[]]    either @{ Label; Steps }, optionally with
+                                  MissingKind / MissingDetail / OmitWhenMissing,
+                                  or a fixed @{ Label; Kind; Detail; Step }
+          Invoke    [scriptblock] param($ctx), returns the Module's Results
+
+    .PARAMETER Descriptor
+        The object a Get-Wcd*Descriptor function returned.
+
+    .PARAMETER ExpectedName
+        Module name the descriptor must declare, when the caller knows it -
+        normally derived from the file name. Omitted, the name is only checked
+        for being present.
+
+    .OUTPUTS
+        [string[]] One line per problem. Empty means the descriptor is valid.
+
+    .EXAMPLE
+        $problems = Test-WcdModuleDescriptor -Descriptor $descriptor -ExpectedName 'Config-Power'
+        if ($problems) { throw ($problems -join '; ') }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        $Descriptor,
+
+        [string]$ExpectedName
+    )
+
+    $problems = @()
+    if ($null -eq $Descriptor) { return @('descriptor is null.') }
+
+    $name = [string]$Descriptor.Name
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $problems += 'Name is missing.'
+    } elseif ($ExpectedName -and $name -ne $ExpectedName) {
+        $problems += ("Name is '{0}' but the file is {1}." -f $name, $ExpectedName)
+    }
+
+    foreach ($field in @('Order', 'RowOrder')) {
+        $value = $Descriptor.$field
+        if ($null -eq $value -or -not ($value -is [int])) {
+            $problems += ('{0} is missing or not an integer.' -f $field)
+        }
+    }
+
+    # An absent Steps property and an empty one mean different things: empty is
+    # a deliberate "nothing to do this run", absent is a Module that forgot to
+    # say. Treating them the same is the bug this whole descriptor replaces.
+    if ($null -eq $Descriptor.PSObject.Properties['Steps']) {
+        $problems += 'Steps is missing. Declare @() to skip the Module.'
+    } else {
+        $index = 0
+        foreach ($step in @($Descriptor.Steps)) {
+            if ([string]::IsNullOrWhiteSpace([string]$step.Key))   { $problems += ('Steps[{0}].Key is missing.' -f $index) }
+            if ([string]::IsNullOrWhiteSpace([string]$step.Label)) { $problems += ('Steps[{0}].Label is missing.' -f $index) }
+            $index++
+        }
+    }
+
+    if ($null -eq $Descriptor.PSObject.Properties['Rows']) {
+        $problems += 'Rows is missing. Declare @() for a Module with no checklist row.'
+    } else {
+        $index = 0
+        foreach ($row in @($Descriptor.Rows)) {
+            if ([string]::IsNullOrWhiteSpace([string]$row.Label)) {
+                $problems += ('Rows[{0}].Label is missing.' -f $index)
+            }
+
+            $hasSteps = $null -ne $row.Steps
+            $hasKind  = -not [string]::IsNullOrWhiteSpace([string]$row.Kind)
+            if ($hasSteps -and $hasKind) {
+                $problems += ('Rows[{0}] declares both Steps and Kind; a row is backed by Steps or states a fixed Kind, not both.' -f $index)
+            } elseif (-not $hasSteps -and -not $hasKind) {
+                $problems += ('Rows[{0}] declares neither Steps nor Kind.' -f $index)
+            }
+
+            if ($hasKind -and @('success', 'warning', 'error', 'manual', 'na') -notcontains [string]$row.Kind) {
+                $problems += ("Rows[{0}].Kind is '{1}'; expected success, warning, error, manual or na." -f $index, $row.Kind)
+            }
+            $index++
+        }
+    }
+
+    if (-not ($Descriptor.Invoke -is [scriptblock])) {
+        $problems += 'Invoke is missing or not a scriptblock.'
+    }
+
+    return @($problems)
+}
+
 function Get-WcdTechnicalStepLabels {
     <#
     .SYNOPSIS
         Maps every Step key to the label shown in the diagnostic.
 
     .DESCRIPTION
-        OS steps carry built-in labels. Application and printer steps name
-        themselves from the manifest, so a target added there appears correctly
-        everywhere without touching this file.
+        Assembled from the Modules' descriptors rather than hardcoded here, so a
+        Step named in one place is named everywhere. Application and printer
+        Steps name themselves from the manifest, which the descriptors read.
 
-    .PARAMETER Config
-        The imported manifest. Optional - omitting it returns the built-in
-        labels only.
+        Unplanned Steps are included: a Module can report a Step it did not plan
+        - Config-Applications raises WingetUnavailable only when the probe fails
+        - and the row still needs a label.
+
+    .PARAMETER Descriptors
+        Every Module descriptor for this run, from Get-Wcd*Descriptor.
 
     .OUTPUTS
         [hashtable] Step key -> label.
 
     .EXAMPLE
-        $labels = Get-WcdTechnicalStepLabels -Config $config
+        $labels = Get-WcdTechnicalStepLabels -Descriptors $descriptors
         $labels['DisplayLanguage']   # Display language
     #>
     [CmdletBinding()]
     param(
-        [hashtable]$Config
+        [object[]]$Descriptors = @()
     )
 
-    $labels = @{
-        'ScreenTimeoutBattery'   = 'Screen timeout on battery'
-        'ScreenTimeoutAc'        = 'Screen timeout on AC'
-        'LidActionBatteryNone'   = 'Lid close on battery: do nothing'
-        'LidActionAcNone'        = 'Lid close on AC: do nothing'
-        'SetActiveSchemeCurrent' = 'Active power scheme'
-        'DecimalAndCurrency'     = 'Decimal and currency'
-        'TaskbarAlignLeft'       = 'Taskbar aligned left'
-        'DisableTaskView'        = 'Task view disabled'
-        'DisplayLanguage'        = 'Display language'
-        'KeyboardLayout'         = 'Keyboard layout'
-        'ApplicationsSkip'       = 'Applications skipped'
-        'WingetUnavailable'      = 'App Installer (winget)'
-        'DeviceManagerStatus'    = 'Device Manager'
-        'DiskHealth'             = 'Disk health'
-        'DiskFreeSpace'          = 'Free space'
-        'TpmReadiness'           = 'TPM readiness'
-        'BitLockerStatus'        = 'Drive encryption'
-        'ComputerName'           = 'Computer name'
-        'DomainJoin'             = 'Domain join'
-        'WindowsUpdateHistory'   = 'Windows Update history'
-        'WindowsUpdateReboot'    = 'Restart pending'
-        'NetworkAdapterStatus'   = 'Network adapters'
-        'NetworkPing8888'        = 'Connectivity test'
-        'RefreshNetworkPlaces'   = 'Refresh network places'
-        'PrinterAdd'             = 'Printers'
-        'PrinterSkip'            = 'Printers skipped'
-    }
-
-    # Application step labels come from the manifest, so a target added there
-    # names itself everywhere without touching this file.
-    if ($null -ne $Config -and $null -ne $Config.Applications) {
-        foreach ($entry in @($Config.Applications)) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$entry.Step)) {
-                $labels[[string]$entry.Step] = [string]$entry.Name
-            }
+    $labels = @{}
+    foreach ($descriptor in @($Descriptors)) {
+        foreach ($step in @($descriptor.Steps)) {
+            $labels[[string]$step.Key] = [string]$step.Label
         }
-    }
-
-    foreach ($printer in @(Get-WcdPrinterTarget -Config $Config)) {
-        $labels[(Get-WcdPrinterStepKey -Name ([string]$printer.Name))] = [string]$printer.Name
     }
 
     return $labels
@@ -601,78 +680,37 @@ function Get-WcdModuleProgressPlan {
         Lists the Step keys each Module will run, in order.
 
     .DESCRIPTION
-        The progress bar needs to know how many steps a Module will produce
-        before it runs. Steps filtered out by the chosen Form Factor or
-        Environment are left out so the bar cannot overshoot.
+        The progress bar needs to know how many Steps a Module will produce
+        before it runs. A descriptor Step carrying Planned = $false is left out,
+        which is how Steps filtered by Form Factor or Environment, and Steps a
+        Module only reports on failure, stay out of the count.
 
-    .PARAMETER ExecutionOptions
-        Resolved run options: FormFactor, Environment, OpenApps, OptionalTools.
+        A Module whose planned Steps come to zero is skipped entirely by the
+        run loop rather than reported as an empty run of itself.
 
-    .PARAMETER Config
-        The imported manifest, used for the application and printer steps.
+    .PARAMETER Descriptors
+        Every Module descriptor for this run, from Get-Wcd*Descriptor.
 
     .OUTPUTS
         [hashtable] Module name -> Step key array.
 
     .EXAMPLE
-        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $options -Config $config
+        $plan = Get-WcdModuleProgressPlan -Descriptors $descriptors
         $plan['Config-Power']   # ScreenTimeoutAc, SetActiveSchemeCurrent
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions,
-
-        [hashtable]$Config
+        [object[]]$Descriptors = @()
     )
 
-    $applicationSteps = if ($ExecutionOptions.OpenApps) {
-        @(Get-WcdApplicationTarget -Config $Config `
-            -Environment $ExecutionOptions.Environment `
-            -FormFactor $ExecutionOptions.FormFactor `
-            -OptionalTools $ExecutionOptions.OptionalTools |
-            ForEach-Object { [string]$_.Step })
-    } else {
-        @('ApplicationsSkip')
+    $plan = @{}
+    foreach ($descriptor in @($Descriptors)) {
+        $plan[[string]$descriptor.Name] = @(@($descriptor.Steps) |
+            Where-Object { $_.Planned -ne $false } |
+            ForEach-Object { [string]$_.Key })
     }
-    if ($applicationSteps.Count -eq 0) { $applicationSteps = @('ApplicationsSkip') }
 
-    $printerSteps = @(Get-WcdPrinterTarget -Config $Config |
-        ForEach-Object { Get-WcdPrinterStepKey -Name ([string]$_.Name) })
-
-    # Identity Steps exist only when the technician asked for them, so a run
-    # that declined both skips the Module rather than reporting an empty one.
-    $identitySteps = @()
-    if (-not [string]::IsNullOrWhiteSpace([string]$ExecutionOptions.NewComputerName)) { $identitySteps += 'ComputerName' }
-    if ($ExecutionOptions.JoinDomain) { $identitySteps += 'DomainJoin' }
-
-    return @{
-        'Config-Identity' = $identitySteps
-        'Config-Power' = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
-            @(
-                'ScreenTimeoutBattery',
-                'ScreenTimeoutAc',
-                'LidActionAcNone',
-                'LidActionBatteryNone',
-                'SetActiveSchemeCurrent'
-            )
-        } else {
-            @(
-                'ScreenTimeoutAc',
-                'SetActiveSchemeCurrent'
-            )
-        }
-        'Config-Decimal' = @('DecimalAndCurrency')
-        'Config-TaskbarLeft' = @('TaskbarAlignLeft', 'DisableTaskView')
-        'Config-Language' = @('DisplayLanguage', 'KeyboardLayout')
-        'Config-Applications' = $applicationSteps
-        'Config-DeviceManager' = @('DeviceManagerStatus')
-        'Config-Disk' = @('DiskHealth', 'DiskFreeSpace')
-        'Config-BitLocker' = @('TpmReadiness', 'BitLockerStatus')
-        'Config-WindowsUpdate' = @('WindowsUpdateHistory', 'WindowsUpdateReboot')
-        'Config-Network' = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
-        'Config-Printer' = $printerSteps
-    }
+    return $plan
 }
 
 function Get-WcdDiagnosticStyle {

@@ -321,3 +321,109 @@ function Set-WcdApplicationsConfiguration {
 
     return $results
 }
+
+function Get-WcdApplicationsDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-Applications contributes to the run.
+
+    .DESCRIPTION
+        Steps and rows both come from the manifest at runtime, so a target added
+        there appears everywhere without touching this file.
+
+        A target excluded by the current Environment or Form Factor is reported
+        Not Applicable rather than omitted, so the technician can see it was
+        considered. Targets the technician declined to open become Manual Steps.
+        A declined Optional Tool is not shown at all - it was never offered as
+        part of this machine's configuration.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdApplicationsDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    $selected = @(Get-WcdApplicationTarget -Config $Config `
+        -Environment $ExecutionOptions.Environment `
+        -FormFactor $ExecutionOptions.FormFactor `
+        -OptionalTools $ExecutionOptions.OptionalTools |
+        ForEach-Object { [string]$_.Step })
+
+    $openApps = [bool]$ExecutionOptions.OpenApps
+
+    # One Step stands in for the whole Module when nothing will be opened, so
+    # the progress bar has something to count and the Module is not skipped.
+    $steps = @(
+        @{ Key = 'ApplicationsSkip';  Label = 'Applications skipped';   Planned = ((-not $openApps) -or $selected.Count -eq 0) }
+        # Raised only when the winget probe fails, so never planned - but the
+        # row still needs a label when it does appear.
+        @{ Key = 'WingetUnavailable'; Label = 'App Installer (winget)'; Planned = $false }
+    )
+    $rows = @(
+        @{ Label = $Translations.Checklist.Winget; Steps = @('WingetUnavailable'); OmitWhenMissing = $true }
+    )
+
+    foreach ($entry in @($Config.Applications)) {
+        $step = [string]$entry.Step
+        $name = [string]$entry.Name
+        if ([string]::IsNullOrWhiteSpace($step)) { continue }
+
+        $isSelected = (@($selected) -contains $step)
+        $steps += @{ Key = $step; Label = $name; Planned = ($openApps -and $isSelected) }
+
+        if (-not $isSelected) {
+            if ($entry.Prompt) { continue }
+            $rows += @{ Label = $name; Kind = 'na'; Detail = $Translations.SecondaryNA; Step = $step }
+        } elseif (-not $openApps) {
+            $rows += @{ Label = $name; Kind = 'manual'; Detail = $Translations.ApplicationManualDetail; Step = $step }
+        } else {
+            $rows += @{ Label = $name; Steps = @($step) }
+        }
+    }
+
+    return [pscustomobject]@{
+        Name     = 'Config-Applications'
+        Order    = 60
+        RowOrder = 110
+        Steps    = $steps
+        Rows     = $rows
+        Invoke   = {
+            param($ctx)
+
+            $targets = @(Get-WcdApplicationTarget -Config $ctx.Config `
+                -Environment $ctx.ExecutionOptions.Environment `
+                -FormFactor $ctx.ExecutionOptions.FormFactor `
+                -OptionalTools $ctx.ExecutionOptions.OptionalTools)
+
+            Set-WcdApplicationsConfiguration -Targets $targets -OpenApps $ctx.ExecutionOptions.OpenApps `
+                -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
+}

@@ -88,3 +88,63 @@ function Set-WcdTaskbarLeft {
 
     return $results
 }
+
+function Get-WcdTaskbarLeftDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-TaskbarLeft contributes to the run.
+
+    .DESCRIPTION
+        Two Steps folded into one row: the technician reads the taskbar as one thing.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdTaskbarLeftDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    return [pscustomobject]@{
+        Name     = 'Config-TaskbarLeft'
+        Order    = 40
+        RowOrder = 20
+        Steps    = @(
+            @{ Key = 'TaskbarAlignLeft'; Label = 'Taskbar aligned left' }
+            @{ Key = 'DisableTaskView';  Label = 'Task view disabled' }
+        )
+        Rows     = @(
+            @{ Label = $Translations.Checklist.Taskbar; Steps = @('TaskbarAlignLeft', 'DisableTaskView') }
+        )
+        Invoke   = {
+            param($ctx)
+
+            Set-WcdTaskbarLeft -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
+}
