@@ -523,73 +523,152 @@ function Get-WcdPrinterStepKey {
     return ('Printer{0}' -f $safe)
 }
 
+function Test-WcdModuleDescriptor {
+    <#
+    .SYNOPSIS
+        Checks one Module descriptor against the contract, returning what is wrong.
+
+    .DESCRIPTION
+        A Module declares itself with a descriptor instead of six registration
+        edits scattered across the orchestrator and the helpers. Nothing else
+        enforces the shape, and a descriptor missing a field would fail silently
+        - a Module absent from the progress plan used to run with a $null step
+        list, and a missing checklist label rendered a blank row.
+
+        So this is the guard. The orchestrator throws on anything it returns,
+        and tests/ModuleDescriptor.Tests.ps1 runs every Module through it.
+
+        Contract:
+          Name      [string]      matches the Config-*.ps1 file it came from
+          Order     [int]         run order
+          RowOrder  [int]         position of its rows in the checklist
+          Steps     [object[]]    @{ Key; Label; Planned = $true }; may be empty,
+                                  which means "skip this Module entirely"
+          Rows      [object[]]    either @{ Label; Steps }, optionally with
+                                  MissingKind / MissingDetail / OmitWhenMissing,
+                                  or a fixed @{ Label; Kind; Detail; Step }
+          Invoke    [scriptblock] param($ctx), returns the Module's Results
+
+    .PARAMETER Descriptor
+        The object a Get-Wcd*Descriptor function returned.
+
+    .PARAMETER ExpectedName
+        Module name the descriptor must declare, when the caller knows it -
+        normally derived from the file name. Omitted, the name is only checked
+        for being present.
+
+    .OUTPUTS
+        [string[]] One line per problem. Empty means the descriptor is valid.
+
+    .EXAMPLE
+        $problems = Test-WcdModuleDescriptor -Descriptor $descriptor -ExpectedName 'Config-Power'
+        if ($problems) { throw ($problems -join '; ') }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        $Descriptor,
+
+        [string]$ExpectedName
+    )
+
+    $problems = @()
+    if ($null -eq $Descriptor) { return @('descriptor is null.') }
+
+    $name = [string]$Descriptor.Name
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $problems += 'Name is missing.'
+    } elseif ($ExpectedName -and $name -ne $ExpectedName) {
+        $problems += ("Name is '{0}' but the file is {1}." -f $name, $ExpectedName)
+    }
+
+    foreach ($field in @('Order', 'RowOrder')) {
+        $value = $Descriptor.$field
+        if ($null -eq $value -or -not ($value -is [int])) {
+            $problems += ('{0} is missing or not an integer.' -f $field)
+        }
+    }
+
+    # An absent Steps property and an empty one mean different things: empty is
+    # a deliberate "nothing to do this run", absent is a Module that forgot to
+    # say. Treating them the same is the bug this whole descriptor replaces.
+    if ($null -eq $Descriptor.PSObject.Properties['Steps']) {
+        $problems += 'Steps is missing. Declare @() to skip the Module.'
+    } else {
+        $index = 0
+        foreach ($step in @($Descriptor.Steps)) {
+            if ([string]::IsNullOrWhiteSpace([string]$step.Key))   { $problems += ('Steps[{0}].Key is missing.' -f $index) }
+            if ([string]::IsNullOrWhiteSpace([string]$step.Label)) { $problems += ('Steps[{0}].Label is missing.' -f $index) }
+            $index++
+        }
+    }
+
+    if ($null -eq $Descriptor.PSObject.Properties['Rows']) {
+        $problems += 'Rows is missing. Declare @() for a Module with no checklist row.'
+    } else {
+        $index = 0
+        foreach ($row in @($Descriptor.Rows)) {
+            if ([string]::IsNullOrWhiteSpace([string]$row.Label)) {
+                $problems += ('Rows[{0}].Label is missing.' -f $index)
+            }
+
+            $hasSteps = $null -ne $row.Steps
+            $hasKind  = -not [string]::IsNullOrWhiteSpace([string]$row.Kind)
+            if ($hasSteps -and $hasKind) {
+                $problems += ('Rows[{0}] declares both Steps and Kind; a row is backed by Steps or states a fixed Kind, not both.' -f $index)
+            } elseif (-not $hasSteps -and -not $hasKind) {
+                $problems += ('Rows[{0}] declares neither Steps nor Kind.' -f $index)
+            }
+
+            if ($hasKind -and @('success', 'warning', 'error', 'manual', 'na') -notcontains [string]$row.Kind) {
+                $problems += ("Rows[{0}].Kind is '{1}'; expected success, warning, error, manual or na." -f $index, $row.Kind)
+            }
+            $index++
+        }
+    }
+
+    if (-not ($Descriptor.Invoke -is [scriptblock])) {
+        $problems += 'Invoke is missing or not a scriptblock.'
+    }
+
+    return @($problems)
+}
+
 function Get-WcdTechnicalStepLabels {
     <#
     .SYNOPSIS
         Maps every Step key to the label shown in the diagnostic.
 
     .DESCRIPTION
-        OS steps carry built-in labels. Application and printer steps name
-        themselves from the manifest, so a target added there appears correctly
-        everywhere without touching this file.
+        Assembled from the Modules' descriptors rather than hardcoded here, so a
+        Step named in one place is named everywhere. Application and printer
+        Steps name themselves from the manifest, which the descriptors read.
 
-    .PARAMETER Config
-        The imported manifest. Optional - omitting it returns the built-in
-        labels only.
+        Unplanned Steps are included: a Module can report a Step it did not plan
+        - Config-Applications raises WingetUnavailable only when the probe fails
+        - and the row still needs a label.
+
+    .PARAMETER Descriptors
+        Every Module descriptor for this run, from Get-Wcd*Descriptor.
 
     .OUTPUTS
         [hashtable] Step key -> label.
 
     .EXAMPLE
-        $labels = Get-WcdTechnicalStepLabels -Config $config
+        $labels = Get-WcdTechnicalStepLabels -Descriptors $descriptors
         $labels['DisplayLanguage']   # Display language
     #>
     [CmdletBinding()]
     param(
-        [hashtable]$Config
+        [object[]]$Descriptors = @()
     )
 
-    $labels = @{
-        'ScreenTimeoutBattery'   = 'Screen timeout on battery'
-        'ScreenTimeoutAc'        = 'Screen timeout on AC'
-        'LidActionBatteryNone'   = 'Lid close on battery: do nothing'
-        'LidActionAcNone'        = 'Lid close on AC: do nothing'
-        'SetActiveSchemeCurrent' = 'Active power scheme'
-        'DecimalAndCurrency'     = 'Decimal and currency'
-        'TaskbarAlignLeft'       = 'Taskbar aligned left'
-        'DisableTaskView'        = 'Task view disabled'
-        'DisplayLanguage'        = 'Display language'
-        'KeyboardLayout'         = 'Keyboard layout'
-        'ApplicationsSkip'       = 'Applications skipped'
-        'WingetUnavailable'      = 'App Installer (winget)'
-        'DeviceManagerStatus'    = 'Device Manager'
-        'DiskHealth'             = 'Disk health'
-        'DiskFreeSpace'          = 'Free space'
-        'TpmReadiness'           = 'TPM readiness'
-        'BitLockerStatus'        = 'Drive encryption'
-        'ComputerName'           = 'Computer name'
-        'DomainJoin'             = 'Domain join'
-        'WindowsUpdateHistory'   = 'Windows Update history'
-        'WindowsUpdateReboot'    = 'Restart pending'
-        'NetworkAdapterStatus'   = 'Network adapters'
-        'NetworkPing8888'        = 'Connectivity test'
-        'RefreshNetworkPlaces'   = 'Refresh network places'
-        'PrinterAdd'             = 'Printers'
-        'PrinterSkip'            = 'Printers skipped'
-    }
-
-    # Application step labels come from the manifest, so a target added there
-    # names itself everywhere without touching this file.
-    if ($null -ne $Config -and $null -ne $Config.Applications) {
-        foreach ($entry in @($Config.Applications)) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$entry.Step)) {
-                $labels[[string]$entry.Step] = [string]$entry.Name
-            }
+    $labels = @{}
+    foreach ($descriptor in @($Descriptors)) {
+        foreach ($step in @($descriptor.Steps)) {
+            $labels[[string]$step.Key] = [string]$step.Label
         }
-    }
-
-    foreach ($printer in @(Get-WcdPrinterTarget -Config $Config)) {
-        $labels[(Get-WcdPrinterStepKey -Name ([string]$printer.Name))] = [string]$printer.Name
     }
 
     return $labels
@@ -601,78 +680,37 @@ function Get-WcdModuleProgressPlan {
         Lists the Step keys each Module will run, in order.
 
     .DESCRIPTION
-        The progress bar needs to know how many steps a Module will produce
-        before it runs. Steps filtered out by the chosen Form Factor or
-        Environment are left out so the bar cannot overshoot.
+        The progress bar needs to know how many Steps a Module will produce
+        before it runs. A descriptor Step carrying Planned = $false is left out,
+        which is how Steps filtered by Form Factor or Environment, and Steps a
+        Module only reports on failure, stay out of the count.
 
-    .PARAMETER ExecutionOptions
-        Resolved run options: FormFactor, Environment, OpenApps, OptionalTools.
+        A Module whose planned Steps come to zero is skipped entirely by the
+        run loop rather than reported as an empty run of itself.
 
-    .PARAMETER Config
-        The imported manifest, used for the application and printer steps.
+    .PARAMETER Descriptors
+        Every Module descriptor for this run, from Get-Wcd*Descriptor.
 
     .OUTPUTS
         [hashtable] Module name -> Step key array.
 
     .EXAMPLE
-        $plan = Get-WcdModuleProgressPlan -ExecutionOptions $options -Config $config
+        $plan = Get-WcdModuleProgressPlan -Descriptors $descriptors
         $plan['Config-Power']   # ScreenTimeoutAc, SetActiveSchemeCurrent
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$ExecutionOptions,
-
-        [hashtable]$Config
+        [object[]]$Descriptors = @()
     )
 
-    $applicationSteps = if ($ExecutionOptions.OpenApps) {
-        @(Get-WcdApplicationTarget -Config $Config `
-            -Environment $ExecutionOptions.Environment `
-            -FormFactor $ExecutionOptions.FormFactor `
-            -OptionalTools $ExecutionOptions.OptionalTools |
-            ForEach-Object { [string]$_.Step })
-    } else {
-        @('ApplicationsSkip')
+    $plan = @{}
+    foreach ($descriptor in @($Descriptors)) {
+        $plan[[string]$descriptor.Name] = @(@($descriptor.Steps) |
+            Where-Object { $_.Planned -ne $false } |
+            ForEach-Object { [string]$_.Key })
     }
-    if ($applicationSteps.Count -eq 0) { $applicationSteps = @('ApplicationsSkip') }
 
-    $printerSteps = @(Get-WcdPrinterTarget -Config $Config |
-        ForEach-Object { Get-WcdPrinterStepKey -Name ([string]$_.Name) })
-
-    # Identity Steps exist only when the technician asked for them, so a run
-    # that declined both skips the Module rather than reporting an empty one.
-    $identitySteps = @()
-    if (-not [string]::IsNullOrWhiteSpace([string]$ExecutionOptions.NewComputerName)) { $identitySteps += 'ComputerName' }
-    if ($ExecutionOptions.JoinDomain) { $identitySteps += 'DomainJoin' }
-
-    return @{
-        'Config-Identity' = $identitySteps
-        'Config-Power' = if ($ExecutionOptions.FormFactor -eq 'Laptop') {
-            @(
-                'ScreenTimeoutBattery',
-                'ScreenTimeoutAc',
-                'LidActionAcNone',
-                'LidActionBatteryNone',
-                'SetActiveSchemeCurrent'
-            )
-        } else {
-            @(
-                'ScreenTimeoutAc',
-                'SetActiveSchemeCurrent'
-            )
-        }
-        'Config-Decimal' = @('DecimalAndCurrency')
-        'Config-TaskbarLeft' = @('TaskbarAlignLeft', 'DisableTaskView')
-        'Config-Language' = @('DisplayLanguage', 'KeyboardLayout')
-        'Config-Applications' = $applicationSteps
-        'Config-DeviceManager' = @('DeviceManagerStatus')
-        'Config-Disk' = @('DiskHealth', 'DiskFreeSpace')
-        'Config-BitLocker' = @('TpmReadiness', 'BitLockerStatus')
-        'Config-WindowsUpdate' = @('WindowsUpdateHistory', 'WindowsUpdateReboot')
-        'Config-Network' = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces')
-        'Config-Printer' = $printerSteps
-    }
+    return $plan
 }
 
 function Get-WcdDiagnosticStyle {
@@ -1071,6 +1109,169 @@ function Complete-WcdProgressStep {
     }
 
     Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $ModuleName -StepKey $StepKey -Event 'Finish' -Kind $kind
+}
+
+function Invoke-WcdStep {
+    <#
+    .SYNOPSIS
+        Runs one Step and returns its Result, owning the progress events, the
+        log lines, the try/catch and the Result shape.
+
+    .DESCRIPTION
+        The twelve lines every Module wrote around the one line that does the
+        work. The Result shape was a literal repeated across every Module, and
+        its optional fields - Severity, RemedyKey, RemedyArgs, Applied,
+        RebootPending - had no schema anywhere: a typo in a property name was
+        not an error, the Diagnostic read $null, and the row quietly rendered as
+        a plain success.
+
+        The Action returns nothing when the Step simply worked. When it has
+        something more to say it returns a hashtable, merged over the Result:
+
+          @{ Severity = 'WARNING'; Error = '...'; RemedyKey = 'RequiresAdmin' }
+            a Step that did not run, and why - reported, not failed
+          @{ Severity = 'WARNING'; RemedyKey = 'DiskLowFreeSpace'; RemedyArgs = @('C:') }
+            a severity chosen from what the machine reported, not from a throw
+          @{ Applied = $true }
+            an extra field the Diagnostic reads
+          @{ Log = 'Power: ... skipped, needs Administrator.' }
+            a log line other than -SuccessLog. Not part of the Result.
+
+        Anything the Action emits that is not a hashtable is ignored, so an
+        Action calling a command that writes to the pipeline still means
+        "it worked".
+
+        An Action that throws produces a failed Result carrying -FailureRemedy,
+        unless -OnFailure classifies the error into something more useful.
+
+        Not every Step wants this. A Module that loops over one manifest entry
+        per Step, or one that decides mid-Step which of several Results to
+        record, is clearer written out; see the note in the manual.
+
+    .PARAMETER Module
+        The Module running the Step, for the progress events.
+
+    .PARAMETER Key
+        The Step key. Becomes the Result's Step.
+
+    .PARAMETER Action
+        The work. Returns nothing on success, or a hashtable merged over the
+        Result.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of the Step. Omit for none.
+
+    .PARAMETER SuccessLog
+        INFO line written when the Step succeeded. Omit to write nothing.
+
+    .PARAMETER FailureLabel
+        What the Step is called in the failure log line, which reads
+        '<FailureLabel>: <Error>'.
+
+    .PARAMETER FailureRemedy
+        RemedyKey put on the Result when the Action throws.
+
+    .PARAMETER OnFailure
+        Scriptblock given the caught ErrorRecord, returning a hashtable merged
+        over the failed Result. For a Step whose failures are worth telling
+        apart - a registry key locked by Group Policy is a different sentence to
+        the technician than a registry write that just failed.
+
+    .OUTPUTS
+        [pscustomobject] one Result, with Step, Success, Error and whatever the
+        Action or -OnFailure added.
+
+    .EXAMPLE
+        Invoke-WcdStep -Module 'Config-Power' -Key 'ScreenTimeoutAc' `
+            -LogPath $logPath -ProgressCallback $ProgressCallback `
+            -SuccessLog 'Power: screen timeout on AC set to 15 min.' `
+            -FailureLabel 'Screen timeout on AC' -FailureRemedy 'PowerCfgFailed' `
+            -Action { Invoke-WcdPowerCfg '/change' 'monitor-timeout-ac' '15' }
+
+    .EXAMPLE
+        # A Step that deliberately did not run, reported rather than failed
+        Invoke-WcdStep -Module 'Config-Power' -Key 'ScreenTimeoutAc' -Action {
+            @{ Severity = 'WARNING'; Error = 'powercfg requires Administrator.'
+               RemedyKey = 'RequiresAdmin' }
+        }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Module,
+
+        [Parameter(Mandatory)]
+        [string]$Key,
+
+        [Parameter(Mandatory)]
+        [scriptblock]$Action,
+
+        [string]$LogPath,
+
+        [scriptblock]$ProgressCallback,
+
+        [string]$SuccessLog,
+
+        [string]$FailureLabel,
+
+        [string]$FailureRemedy,
+
+        [scriptblock]$OnFailure
+    )
+
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
+    Invoke-WcdProgressCallback -ProgressCallback $ProgressCallback -ModuleName $Module -StepKey $Key -Event 'Start'
+
+    # Ordered, so a Result reads Step / Success / Error first however many extra
+    # fields a Step adds.
+    $fields = [ordered]@{ Step = $Key; Success = $true; Error = '' }
+    $failed = $false
+
+    try {
+        foreach ($emitted in @(& $Action)) {
+            if ($emitted -isnot [System.Collections.IDictionary]) { continue }
+            foreach ($name in @($emitted.Keys)) { $fields[[string]$name] = $emitted[$name] }
+        }
+    } catch {
+        $failed = $true
+        $fragment = if ($OnFailure) {
+            & $OnFailure $_
+        } else {
+            @{ Error = $_.Exception.Message; RemedyKey = $FailureRemedy }
+        }
+
+        foreach ($emitted in @($fragment)) {
+            if ($emitted -isnot [System.Collections.IDictionary]) { continue }
+            foreach ($name in @($emitted.Keys)) { $fields[[string]$name] = $emitted[$name] }
+        }
+
+        # A Step that threw failed, whatever the classifier said.
+        $fields['Success'] = $false
+    }
+
+    # Log is how a Step says what to write; it is not part of the Result.
+    $logOverride = if ($fields.Contains('Log')) { [string]$fields['Log'] } else { $null }
+    if ($null -ne $logOverride) { $fields.Remove('Log') }
+
+    $result = [pscustomobject]$fields
+
+    if ($failed) {
+        $message = if ($null -ne $logOverride) { $logOverride } else { '{0}: {1}' -f $FailureLabel, [string]$result.Error }
+        Write-WcdLog -Path $resolvedLogPath -Level 'ERROR' -Message $message
+    } else {
+        $message = if ($null -ne $logOverride) { $logOverride } else { $SuccessLog }
+        if (-not [string]::IsNullOrWhiteSpace($message)) {
+            Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message $message
+        }
+    }
+
+    # One place decides the progress kind from the Result, already.
+    Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $Module -StepKey $Key -Results @($result)
+
+    return $result
 }
 
 function Get-WcdHistoryBlock {

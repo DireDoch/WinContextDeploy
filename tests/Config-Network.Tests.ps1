@@ -196,4 +196,66 @@ Describe 'Config-Network' {
             Assert-MockCalled 'Test-WcdNetworkPing' 0
         }
     }
+
+    # The exclusion list is the domain knowledge in Config-Network.ps1: the
+    # thing a site edits when its VPN client turns up in the summary. Test it
+    # where it lives rather than through a whole diagnostic run.
+    It 'exclut les adaptateurs virtuels et auxiliaires' {
+        $excluded = @(
+            [pscustomobject]@{ Name = 'Bluetooth Network Connection'; InterfaceDescription = 'Bluetooth Device (PAN)' }
+            [pscustomobject]@{ Name = 'Loopback'; InterfaceDescription = 'Microsoft KM-TEST Loopback Adapter' }
+            [pscustomobject]@{ Name = 'vEthernet (Default Switch)'; InterfaceDescription = 'Hyper-V Virtual Ethernet Adapter' }
+            [pscustomobject]@{ Name = 'Ethernet 3'; InterfaceDescription = 'VMware Virtual Ethernet Adapter' }
+            [pscustomobject]@{ Name = 'Cisco AnyConnect'; InterfaceDescription = 'Cisco AnyConnect Virtual Miniport Adapter' }
+            [pscustomobject]@{ Name = 'PANGP'; InterfaceDescription = 'PANGP Virtual Ethernet Adapter' }
+            [pscustomobject]@{ Name = 'Local Area Connection'; InterfaceDescription = 'WAN Miniport (IP)' }
+            [pscustomobject]@{ Name = 'isatap.local'; InterfaceDescription = 'Microsoft ISATAP Adapter' }
+            [pscustomobject]@{ Name = 'Teredo'; InterfaceDescription = 'Teredo Tunneling Pseudo-Interface' }
+            [pscustomobject]@{ Name = 'TAP'; InterfaceDescription = 'TAP-Windows Adapter V9' }
+            [pscustomobject]@{ Name = 'Juniper'; InterfaceDescription = 'Juniper Network Connect Virtual Adapter' }
+        )
+
+        foreach ($adapter in $excluded) {
+            $kept = Test-WcdRelevantNetworkAdapter -Adapter $adapter
+            if ($script:PesterMajorVersion -ge 5) {
+                $kept | Should -BeFalse -Because ('{0} devrait etre exclu' -f $adapter.Name)
+            } else {
+                $kept | Should Be $false
+            }
+        }
+    }
+
+    It 'garde les adaptateurs Ethernet et Wi-Fi reels' {
+        $relevantAdapters = @(
+            [pscustomobject]@{ Name = 'Ethernet'; InterfaceDescription = 'Intel(R) Ethernet Connection I219-LM' }
+            [pscustomobject]@{ Name = 'Wi-Fi'; InterfaceDescription = 'Intel(R) Wi-Fi 6 AX201 160MHz' }
+        )
+
+        foreach ($adapter in $relevantAdapters) {
+            $relevant = Test-WcdRelevantNetworkAdapter -Adapter $adapter
+            if ($script:PesterMajorVersion -ge 5) {
+                $relevant | Should -BeTrue -Because ('{0} devrait etre garde' -f $adapter.Name)
+            } else {
+                $relevant | Should Be $true
+            }
+        }
+    }
+
+    It 'ne garde que les adaptateurs a la fois actifs et pertinents' {
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Ethernet';  InterfaceDescription = 'Intel Ethernet';  Status = 'Up' }
+            [pscustomobject]@{ Name = 'Wi-Fi';     InterfaceDescription = 'Intel Wi-Fi 6';   Status = 'Disconnected' }
+            [pscustomobject]@{ Name = 'vEthernet'; InterfaceDescription = 'Hyper-V Virtual'; Status = 'Up' }
+        )
+
+        $active = @(Get-WcdActiveNetworkAdapters -Adapters $adapters)
+
+        if ($script:PesterMajorVersion -ge 5) {
+            $active.Count | Should -Be 1
+            $active[0].Name | Should -Be 'Ethernet'
+        } else {
+            $active.Count | Should Be 1
+            $active[0].Name | Should Be 'Ethernet'
+        }
+    }
 }

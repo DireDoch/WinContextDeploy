@@ -30,6 +30,16 @@ Describe 'WcdDiagnostic' {
 
         . $diagnosticPath
 
+        # La checklist assemble des descripteurs. On charge le vrai
+        # Config-Applications plutot que d'en simuler un.
+        . (Join-Path $srcDir 'Config-Applications.ps1')
+
+        function New-TestDescriptor {
+            param([hashtable]$Config, [pscustomobject]$ExecutionOptions)
+            return @(Get-WcdApplicationsDescriptor -ExecutionOptions $ExecutionOptions `
+                -Config $Config -Translations $script:T)
+        }
+
         $script:StepLabels = @{
             ScreenTimeoutAc        = 'Screen timeout (AC)'
             SetActiveSchemeCurrent = 'Apply power scheme'
@@ -40,14 +50,15 @@ Describe 'WcdDiagnostic' {
             param(
                 [string]$Environment = 'Workstation',
                 [string]$FormFactor = 'Desktop',
-                [string[]]$OptionalTools = @()
+                [string[]]$OptionalTools = @(),
+                [bool]$OpenApps = $true
             )
 
             return [pscustomobject]@{
                 Language        = 'FR'
                 FormFactor      = $FormFactor
                 Environment     = $Environment
-                OpenApps        = $true
+                OpenApps        = $OpenApps
                 OptionalTools   = $OptionalTools
                 NewComputerName = ''
                 JoinDomain      = $false
@@ -67,11 +78,16 @@ Describe 'WcdDiagnostic' {
                     @{ Step = 'AppErp'; Name = 'ERP client'; Action = 'Start'; Target = 'C:\erp.exe' }
                 )
             }
-            # ApplicationsSkip: le technicien a repondu Non a l'ouverture des applications.
+            # ApplicationsSkip: le technicien a repondu Non a l'ouverture des
+            # applications. C'est OpenApps = $false qui produit ce Resultat, et
+            # le descripteur lit la meme option: les deux ne peuvent plus
+            # diverger comme le faisait cette fixture.
             $results = @([pscustomobject]@{ Step = 'ApplicationsSkip'; Success = $true; Error = ''; Severity = 'INFO' })
 
+            $options = New-TestExecutionOptions -OpenApps $false
             $entries = @(Get-WcdFinalChecklistEntries -AllResults $results `
-                -ExecutionOptions (New-TestExecutionOptions) -StepLabels $script:StepLabels -Config $config)
+                -Descriptors (New-TestDescriptor -Config $config -ExecutionOptions $options) `
+                -StepLabels $script:StepLabels -Config $config)
             $entry = Get-TestEntry -Entries $entries -Label 'ERP client'
 
             $entry.Kind | Should -Be 'manual'
@@ -85,8 +101,9 @@ Describe 'WcdDiagnostic' {
                 )
             }
 
+            $options = New-TestExecutionOptions -Environment 'Vdi'
             $entries = @(Get-WcdFinalChecklistEntries -AllResults @() `
-                -ExecutionOptions (New-TestExecutionOptions -Environment 'Vdi') `
+                -Descriptors (New-TestDescriptor -Config $config -ExecutionOptions $options) `
                 -StepLabels $script:StepLabels -Config $config)
             $entry = Get-TestEntry -Entries $entries -Label 'ERP client'
 
@@ -227,7 +244,7 @@ Describe 'WcdDiagnostic' {
 
     Context 'Rendu du Diagnostic' {
         It 'rend les deux sections et la ligne de resume dans le texte de l historique' {
-            $moduleStatus = @([pscustomobject]@{ Module = 'Config-Power'; Status = 'OK'; Etapes = 2; Detail = '' })
+            $moduleStatus = @([pscustomobject]@{ Module = 'Config-Power'; Status = 'OK'; Steps = 2; Detail = '' })
             $entries = @(New-WcdDiagnosticEntry -Label 'Power options' -Kind 'success' -Step 'ScreenTimeoutAc')
 
             $lines = @(Get-WcdFinalDiagnosticLines -ModuleStatus $moduleStatus -ChecklistEntries $entries -SummaryLine '1 OK')

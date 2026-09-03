@@ -363,3 +363,83 @@ function Set-WcdMachineIdentity {
 
     return $results
 }
+
+function Get-WcdIdentityDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-Identity contributes to the run.
+
+    .DESCRIPTION
+        Two Steps that only exist when the technician asked for them: a run that
+        declined both plans nothing, and the run loop skips the Module.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdIdentityDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    # Declining is a choice, not a filter, so the rows stay Manual Steps rather
+    # than Not Applicable - which also lets a fleet-wide report show which
+    # machines are still unnamed.
+    $wantsRename = -not [string]::IsNullOrWhiteSpace([string]$ExecutionOptions.NewComputerName)
+    $wantsJoin = [bool]$ExecutionOptions.JoinDomain
+
+    return [pscustomobject]@{
+        Name     = 'Config-Identity'
+        Order    = 10
+        RowOrder = 10
+        Steps    = @(
+            @{ Key = 'ComputerName'; Label = 'Computer name'; Planned = $wantsRename }
+            @{ Key = 'DomainJoin';   Label = 'Domain join';   Planned = $wantsJoin }
+        )
+        Rows     = @(
+            @{ Label = $Translations.Checklist.ComputerName; Steps = @('ComputerName')
+               MissingKind = 'manual'; MissingDetail = $Translations.IdentityManualDetail }
+            @{ Label = $Translations.Checklist.DomainJoin;   Steps = @('DomainJoin')
+               MissingKind = 'manual'; MissingDetail = $Translations.IdentityManualDetail }
+        )
+        Invoke   = {
+            param($ctx)
+
+            $domainName = if ($null -ne $ctx.DomainTarget) { [string]$ctx.DomainTarget.Name } else { '' }
+            $ouPath = if ($null -ne $ctx.DomainTarget) { [string]$ctx.DomainTarget.OUPath } else { '' }
+
+            Set-WcdMachineIdentity `
+                -NewComputerName $ctx.ExecutionOptions.NewComputerName `
+                -JoinDomain $ctx.ExecutionOptions.JoinDomain `
+                -DomainName $domainName `
+                -OUPath $ouPath `
+                -Elevated $ctx.Elevated `
+                -PromptMessage ($ctx.Translations.CredentialPrompt -f $domainName) `
+                -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
+}

@@ -64,7 +64,7 @@ Describe 'Config-Identity' {
         }
     }
 
-    Context 'Get-WcdModuleProgressPlan' {
+    Context 'Get-WcdIdentityDescriptor' {
         BeforeAll {
             function script:New-TestOptions {
                 param([string]$NewComputerName = '', [bool]$JoinDomain = $false)
@@ -78,25 +78,32 @@ Describe 'Config-Identity' {
                     JoinDomain      = $JoinDomain
                 }
             }
+
+            function script:New-TestDescriptor {
+                param([string]$NewComputerName = '', [bool]$JoinDomain = $false)
+                return @(Get-WcdIdentityDescriptor `
+                    -ExecutionOptions (New-TestOptions -NewComputerName $NewComputerName -JoinDomain $JoinDomain) `
+                    -Config @{} -Translations @{ Checklist = @{} })
+            }
         }
 
         It 'ne planifie aucune etape en -NonInteractive, donc le Module est saute' {
             # -NonInteractive ne demande rien, donc ni nom ni jonction: le plan
             # est vide, la boucle de modules saute Config-Identity, et la
             # checklist rapporte les deux lignes comme MANUAL.
-            $plan = Get-WcdModuleProgressPlan -ExecutionOptions (New-TestOptions) -Config @{}
+            $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor)
 
             @($plan['Config-Identity']).Count | Should -Be 0
         }
 
         It 'ne planifie que les etapes demandees' {
-            $plan = Get-WcdModuleProgressPlan -ExecutionOptions (New-TestOptions -NewComputerName 'POSTE-01') -Config @{}
+            $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor -NewComputerName 'POSTE-01')
             @($plan['Config-Identity']) | Should -Be @('ComputerName')
 
-            $plan = Get-WcdModuleProgressPlan -ExecutionOptions (New-TestOptions -JoinDomain $true) -Config @{}
+            $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor -JoinDomain $true)
             @($plan['Config-Identity']) | Should -Be @('DomainJoin')
 
-            $plan = Get-WcdModuleProgressPlan -ExecutionOptions (New-TestOptions -NewComputerName 'POSTE-01' -JoinDomain $true) -Config @{}
+            $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor -NewComputerName 'POSTE-01' -JoinDomain $true)
             @($plan['Config-Identity']) | Should -Be @('ComputerName', 'DomainJoin')
         }
     }

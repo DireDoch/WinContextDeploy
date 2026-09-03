@@ -142,3 +142,67 @@ function Set-WcdPrinterConfiguration {
 
     return $results
 }
+
+function Get-WcdPrinterDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-Printer contributes to the run.
+
+    .DESCRIPTION
+        One Step per queue declared in the manifest, folded into one row. A
+        manifest declaring no queue plans nothing, the Module is skipped, and
+        printers stay a Manual Step the Diagnostic raises at the end.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdPrinterDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    $printers = @(Get-WcdPrinterTarget -Config $Config)
+    $steps = @($printers | ForEach-Object {
+        @{ Key = (Get-WcdPrinterStepKey -Name ([string]$_.Name)); Label = [string]$_.Name }
+    })
+
+    return [pscustomobject]@{
+        Name     = 'Config-Printer'
+        Order    = 120
+        RowOrder = 120
+        Steps    = $steps
+        Rows     = @(if ($steps.Count -gt 0) {
+            @{ Label = $Translations.Checklist.Printers; Steps = @($steps | ForEach-Object { $_.Key }) }
+        })
+        Invoke   = {
+            param($ctx)
+
+            Set-WcdPrinterConfiguration -Config $ctx.Config -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
+}

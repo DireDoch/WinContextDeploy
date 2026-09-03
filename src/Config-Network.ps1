@@ -4,6 +4,12 @@
 #
 # Read-only: it changes nothing and needs no elevation.
 
+# The virtual and auxiliary interfaces a freshly imaged machine carries, which
+# would drown the real Wi-Fi and Ethernet adapters in the summary. This is the
+# domain knowledge in this file: when a site's VPN client turns up in the
+# summary and should not, add it here.
+$script:WcdIrrelevantAdapterPattern = 'bluetooth|loopback|isatap|teredo|vmware|hyper-v|vEthernet|virtual|vpn|wan miniport|miniport|pangp|anyconnect|juniper|tap'
+
 function Get-WcdNetworkAdapters {
     <#
     .SYNOPSIS
@@ -28,30 +34,6 @@ function Get-WcdNetworkAdapters {
     }
 
     return @(Get-NetAdapter -ErrorAction Stop)
-}
-
-function Test-WcdNetworkAdapterActive {
-    <#
-    .SYNOPSIS
-        Reports whether an adapter is up.
-
-    .PARAMETER Adapter
-        An adapter object.
-
-    .OUTPUTS
-        [bool] $true when its Status is Up or Connected.
-
-    .EXAMPLE
-        Test-WcdNetworkAdapterActive -Adapter $adapter
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        $Adapter
-    )
-
-    $status = [string]$Adapter.Status
-    return ($status -match '^(Up|Connected)$')
 }
 
 function Test-WcdRelevantNetworkAdapter {
@@ -86,7 +68,7 @@ function Test-WcdRelevantNetworkAdapter {
         [string]$Adapter.DriverDescription
     ) -join ' '
 
-    return (-not ($text -match 'bluetooth|loopback|isatap|teredo|vmware|hyper-v|vEthernet|virtual|vpn|wan miniport|miniport|pangp|anyconnect|juniper|tap'))
+    return (-not ($text -match $script:WcdIrrelevantAdapterPattern))
 }
 
 function Get-WcdActiveNetworkAdapters {
@@ -110,7 +92,7 @@ function Get-WcdActiveNetworkAdapters {
     )
 
     return @($Adapters | Where-Object {
-        (Test-WcdNetworkAdapterActive -Adapter $_) -and
+        ([string]$_.Status -match '^(Up|Connected)$') -and
         (Test-WcdRelevantNetworkAdapter -Adapter $_)
     })
 }
@@ -516,7 +498,7 @@ function Set-WcdNetworkDiagnostics {
                 Severity = 'WARNING'
                 Error    = $message
             }
-        } elseif (-not (Test-WcdNetworkAdapterActive -Adapter $wifiAdapter)) {
+        } elseif ([string]$wifiAdapter.Status -notmatch '^(Up|Connected)$') {
             $wifiName = if (-not [string]::IsNullOrWhiteSpace($wifiAdapter.InterfaceDescription)) { $wifiAdapter.InterfaceDescription } else { $wifiAdapter.Name }
             $message = 'Wi-Fi adapter detected ({0}) but not active (Status: {1}). Wi-Fi ping skipped.' -f $wifiName, $wifiAdapter.Status
             Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ('Network: {0}' -f $message)
@@ -617,4 +599,66 @@ function Set-WcdNetworkDiagnostics {
     Complete-WcdProgressStep -ProgressCallback $ProgressCallback -ModuleName $moduleName -StepKey 'RefreshNetworkPlaces' -Results $results
 
     return $results
+}
+
+function Get-WcdNetworkDescriptor {
+    <#
+    .SYNOPSIS
+        Declares what Config-Network contributes to the run.
+
+    .DESCRIPTION
+        Three Steps folded into one row: the technician reads the network as one thing.
+
+        A Module declares itself here instead of in six places across the
+        orchestrator and the helpers. See Test-WcdModuleDescriptor in
+        WcdHelpers.ps1 for the contract.
+
+    .PARAMETER ExecutionOptions
+        Resolved run options: Language, FormFactor, Environment, OpenApps,
+        OptionalTools, NewComputerName and JoinDomain.
+
+    .PARAMETER Config
+        The imported manifest.
+
+    .PARAMETER Translations
+        The active $T table, for the checklist row labels.
+
+    .OUTPUTS
+        [pscustomobject] with Name, Order, RowOrder, Steps, Rows and Invoke.
+
+    .EXAMPLE
+        Get-WcdNetworkDescriptor -ExecutionOptions $options -Config $config -Translations $T
+    #>
+    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # the same way, so each declares all three parameters even when it reads one.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
+    [CmdletBinding()]
+    param(
+        [pscustomobject]$ExecutionOptions,
+
+        [hashtable]$Config,
+
+        [hashtable]$Translations
+    )
+
+    return [pscustomobject]@{
+        Name     = 'Config-Network'
+        Order    = 110
+        RowOrder = 100
+        Steps    = @(
+            @{ Key = 'NetworkAdapterStatus';  Label = 'Network adapters' }
+            @{ Key = 'NetworkPing8888';       Label = 'Connectivity test' }
+            @{ Key = 'RefreshNetworkPlaces';  Label = 'Refresh network places' }
+        )
+        Rows     = @(
+            @{ Label = $Translations.Checklist.Network
+               Steps = @('NetworkAdapterStatus', 'NetworkPing8888', 'RefreshNetworkPlaces') }
+        )
+        Invoke   = {
+            param($ctx)
+
+            Set-WcdNetworkDiagnostics -Config $ctx.Config -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+        }
+    }
 }
