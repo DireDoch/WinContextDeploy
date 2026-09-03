@@ -227,7 +227,7 @@ Describe 'WcdDiagnostic' {
 
     Context 'Rendu du Diagnostic' {
         It 'rend les deux sections et la ligne de resume dans le texte de l historique' {
-            $moduleStatus = @([pscustomobject]@{ Module = 'Config-Power'; Status = 'OK'; Etapes = 2; Detail = '' })
+            $moduleStatus = @([pscustomobject]@{ Module = 'Config-Power'; Status = 'OK'; Steps = 2; Detail = '' })
             $entries = @(New-WcdDiagnosticEntry -Label 'Power options' -Kind 'success' -Step 'ScreenTimeoutAc')
 
             $lines = @(Get-WcdFinalDiagnosticLines -ModuleStatus $moduleStatus -ChecklistEntries $entries -SummaryLine '1 OK')

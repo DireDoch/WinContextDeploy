@@ -375,7 +375,7 @@ function Format-WcdModuleLine {
         Renders one row of the per-Module diagnostic.
 
     .PARAMETER ModuleStatus
-        A module status object: Module, Status, Etapes, Detail.
+        A module status object: Module, Status, Steps, Detail.
 
     .OUTPUTS
         [string] The rendered line.
@@ -391,7 +391,7 @@ function Format-WcdModuleLine {
 
     $kind = Get-WcdModuleStatusKind -Status $ModuleStatus.Status
     $style = Get-WcdDiagnosticStyle -Kind $kind
-    $line = ('  {0}  {1,-25} {2,-9} {3} {4}' -f $style.Icon, $ModuleStatus.Module, $ModuleStatus.Status, $ModuleStatus.Etapes, $T.StepCount)
+    $line = ('  {0}  {1,-25} {2,-9} {3} {4}' -f $style.Icon, $ModuleStatus.Module, $ModuleStatus.Status, $ModuleStatus.Steps, $T.StepCount)
     if (-not [string]::IsNullOrWhiteSpace($ModuleStatus.Detail)) {
         $line += '  ' + $ModuleStatus.Detail
     }

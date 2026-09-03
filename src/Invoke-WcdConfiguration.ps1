@@ -196,12 +196,12 @@ $T = if ($ScriptUI -eq 'EN') {
         InvalidChoice           = 'Invalid choice. Try again.'
         NavHint                 = 'Use Left/Right to change, then Enter to confirm.'
         FallbackEnterHint       = 'Press Enter to continue'
-        EngineerBoxTitle        = 'Engineer configuration - multiple choices'
-        EngineerCombineHint     = '  Combine numbers for multiple choices (e.g: 12 = Nvidia + GPS)'
-        EngineerChoicePrompt    = '  Your choice'
-        EngineerAtLeastOne      = '  Please enter at least one number.'
-        EngineerInvalidChoice   = '  Invalid choice. Valid numbers: {0}'
-        EngineerSelection       = '  Selection: {0}'
+        OptionalToolBoxTitle    = 'Engineer configuration - multiple choices'
+        OptionalToolCombineHint = '  Combine numbers for multiple choices (e.g: 12 = Nvidia + GPS)'
+        OptionalToolChoicePrompt = '  Your choice'
+        OptionalToolAtLeastOne  = '  Please enter at least one number.'
+        OptionalToolInvalidChoice = '  Invalid choice. Valid numbers: {0}'
+        OptionalToolSelection   = '  Selection: {0}'
         WaitEnterFinish         = 'Press Enter to finish the script.'
         WaitEnterExport         = 'Press Enter to finish the script and export logs to the removable drive.'
         PromptLanguage          = 'Windows system language'
@@ -210,8 +210,8 @@ $T = if ($ScriptUI -eq 'EN') {
         PromptFormFactorDesc1   = '  Laptop = has a battery and a lid  |  Desktop = neither'
         PromptFormFactorDesc2   = '  Selects the power profile: battery and lid-close settings.'
         PromptEnvironment       = 'Machine environment'
-        PromptUsageDesc1        = '  Workstation = full local machine  -> checks the locally installed applications'
-        PromptUsageDesc2        = '  Citrix / VDI = thin endpoint      -> its applications live in the remote session'
+        PromptEnvironmentDesc1  = '  Workstation = full local machine  -> checks the locally installed applications'
+        PromptEnvironmentDesc2  = '  Citrix / VDI = thin endpoint      -> its applications live in the remote session'
         PromptOpenApps          = 'Open {0} configuration applications?'
         PromptOpenAppsDesc1     = '  Opens the Application Targets declared in WinContextDeploy.psd1.'
         PromptOpenAppsDesc2     = '  Answer Yes unless applications were already opened manually.'
@@ -233,9 +233,9 @@ $T = if ($ScriptUI -eq 'EN') {
             Unchanged  = '  That is already the name of this machine.'
         }
         CredentialPrompt        = 'Domain account allowed to join {0}'
-        PromptEngineer          = 'Engineering workstation? (offers the optional tools)'
-        PromptEngineerDesc1     = '  Offers the extras declared Prompt in WinContextDeploy.psd1.'
-        PromptEngineerDesc2     = '  Answer No for a standard device.'
+        PromptOptionalTool      = 'Engineering workstation? (offers the optional tools)'
+        PromptOptionalToolDesc1 = '  Offers the extras declared Prompt in WinContextDeploy.psd1.'
+        PromptOptionalToolDesc2 = '  Answer No for a standard device.'
         MissingModuleData       = 'No data returned by the module.'
         MissingStepTech         = 'Missing technical step: {0}'
         ApplicationManualDetail = 'Launch skipped (answered No). Manual verification required.'
@@ -371,12 +371,12 @@ $T = if ($ScriptUI -eq 'EN') {
         InvalidChoice           = 'Choix invalide. Reessayer.'
         NavHint                 = 'Utiliser Gauche/Droite pour changer, puis Entree pour confirmer.'
         FallbackEnterHint       = 'Appuyer sur Enter pour continuer'
-        EngineerBoxTitle        = 'Configuration ingenieur - choix multiples'
-        EngineerCombineHint     = '  Combiner les numeros pour plusieurs choix (ex: 12 = Nvidia + GPS)'
-        EngineerChoicePrompt    = '  Votre choix'
-        EngineerAtLeastOne      = '  Veuillez entrer au moins un numero.'
-        EngineerInvalidChoice   = '  Choix invalide. Numeros valides: {0}'
-        EngineerSelection       = '  Selection: {0}'
+        OptionalToolBoxTitle    = 'Configuration ingenieur - choix multiples'
+        OptionalToolCombineHint = '  Combiner les numeros pour plusieurs choix (ex: 12 = Nvidia + GPS)'
+        OptionalToolChoicePrompt = '  Votre choix'
+        OptionalToolAtLeastOne  = '  Veuillez entrer au moins un numero.'
+        OptionalToolInvalidChoice = '  Choix invalide. Numeros valides: {0}'
+        OptionalToolSelection   = '  Selection: {0}'
         WaitEnterFinish         = 'Cliquer sur Enter pour terminer le script.'
         WaitEnterExport         = 'Cliquer sur Enter pour terminer le script et envoyer les logs vers le disque amovible.'
         PromptLanguage          = 'Langue du systeme Windows'
@@ -385,8 +385,8 @@ $T = if ($ScriptUI -eq 'EN') {
         PromptFormFactorDesc1   = '  Portable = laptop avec batterie  |  Bureau = ordinateur fixe sans batterie'
         PromptFormFactorDesc2   = "  Affecte les parametres de veille et de gestion d energie."
         PromptEnvironment       = 'Usage du poste (Principal = local | Secondaire = Citrix ?)'
-        PromptUsageDesc1        = '  Principal = poste physique local  -> ouvre les fichiers de SAP Front End et MicroFocus'
-        PromptUsageDesc2        = '  Secondaire = poste Citrix         -> ouvre la page de telechargement Citrix Workspace'
+        PromptEnvironmentDesc1  = '  Principal = poste physique local  -> ouvre les fichiers de SAP Front End et MicroFocus'
+        PromptEnvironmentDesc2  = '  Secondaire = poste Citrix         -> ouvre la page de telechargement Citrix Workspace'
         PromptOpenApps          = 'Ouvrir les applications de configuration {0} ?'
         PromptOpenAppsDesc1     = '  Ouvre les applications declarees dans WinContextDeploy.psd1.'
         PromptOpenAppsDesc2     = '  Repondre Oui sauf si les applications ont deja ete ouvertes manuellement.'
@@ -408,9 +408,9 @@ $T = if ($ScriptUI -eq 'EN') {
             Unchanged  = '  Le poste porte deja ce nom.'
         }
         CredentialPrompt        = 'Compte de domaine autorise a joindre {0}'
-        PromptEngineer          = "Poste d ingenieur ? (propose les outils optionnels)"
-        PromptEngineerDesc1     = '  Propose les extras declares Prompt dans WinContextDeploy.psd1.'
-        PromptEngineerDesc2     = '  Repondre Non pour un poste standard.'
+        PromptOptionalTool      = "Poste d ingenieur ? (propose les outils optionnels)"
+        PromptOptionalToolDesc1 = '  Propose les extras declares Prompt dans WinContextDeploy.psd1.'
+        PromptOptionalToolDesc2 = '  Repondre Non pour un poste standard.'
         MissingModuleData       = 'Aucune donnee retournee par le module.'
         MissingStepTech         = 'Etape technique manquante: {0}'
         ApplicationManualDetail = 'Ouverture ignoree (repondu Non). Verification manuelle requise.'
@@ -785,32 +785,32 @@ function Read-WcdOptionalToolChoice {
     }
 
     Write-Host ''
-    Write-Host (' +{0}+' -f ('-' * ($T.EngineerBoxTitle.Length + 2))) -ForegroundColor Cyan
-    Write-Host (' |  {0}  |' -f $T.EngineerBoxTitle) -ForegroundColor Cyan
-    Write-Host (' +{0}+' -f ('-' * ($T.EngineerBoxTitle.Length + 2))) -ForegroundColor Cyan
+    Write-Host (' +{0}+' -f ('-' * ($T.OptionalToolBoxTitle.Length + 2))) -ForegroundColor Cyan
+    Write-Host (' |  {0}  |' -f $T.OptionalToolBoxTitle) -ForegroundColor Cyan
+    Write-Host (' +{0}+' -f ('-' * ($T.OptionalToolBoxTitle.Length + 2))) -ForegroundColor Cyan
     Write-Host ''
     foreach ($key in $options.Keys) {
         Write-Host ("    {0}. {1}" -f $key, $options[$key]) -ForegroundColor White
     }
     Write-Host ''
-    Write-Host $T.EngineerCombineHint -ForegroundColor DarkGray
+    Write-Host $T.OptionalToolCombineHint -ForegroundColor DarkGray
 
     while ($true) {
         Write-Host ''
-        $answer = Read-Host $T.EngineerChoicePrompt
+        $answer = Read-Host $T.OptionalToolChoicePrompt
         if ([string]::IsNullOrWhiteSpace($answer)) {
-            Write-Host $T.EngineerAtLeastOne -ForegroundColor Yellow
+            Write-Host $T.OptionalToolAtLeastOne -ForegroundColor Yellow
             continue
         }
 
         $parsed = ConvertTo-WcdOptionalToolSelection -RawInput $answer -ValidKeys @($options.Keys)
         if ($parsed.Count -eq 0) {
-            Write-Host ($T.EngineerInvalidChoice -f ($options.Keys -join ', ')) -ForegroundColor Yellow
+            Write-Host ($T.OptionalToolInvalidChoice -f ($options.Keys -join ', ')) -ForegroundColor Yellow
             continue
         }
 
         $selectedNames = @($parsed | ForEach-Object { $options[$_] })
-        Write-Host ($T.EngineerSelection -f ($selectedNames -join ' + ')) -ForegroundColor Green
+        Write-Host ($T.OptionalToolSelection -f ($selectedNames -join ' + ')) -ForegroundColor Green
         return $selectedNames
     }
 }
@@ -985,14 +985,14 @@ function Resolve-WcdExecutionOptions {
     )
 
     $languageResult = $SelectedLanguage
-    $deviceResult = $SelectedFormFactor
-    $usageResult = $SelectedEnvironment
+    $formFactorResult = $SelectedFormFactor
+    $environmentResult = $SelectedEnvironment
     $openAppsResult = $SelectedOpenApps
-    $engineerResult = $SelectedOptionalTools
+    $optionalToolResult = $SelectedOptionalTools
     $newNameResult = $SelectedNewComputerName
     $joinResult = [bool]$SelectedJoinDomain
 
-    $engineerTypes = @()
+    $optionalToolNames = @()
 
     if (-not $DisablePrompt) {
         if (-not $languageResult) {
@@ -1001,23 +1001,23 @@ function Resolve-WcdExecutionOptions {
                 -Description @($T.PromptLanguageDesc)
         }
 
-        if (-not $deviceResult) {
+        if (-not $formFactorResult) {
             Write-Host ''
-            $deviceResult = Read-WcdChoice -Prompt $T.PromptFormFactor -Choices ([ordered]@{ $T.KeyLaptop = 'Laptop'; $T.KeyDesktop = 'Desktop' }) -DefaultKey $T.KeyLaptop `
+            $formFactorResult = Read-WcdChoice -Prompt $T.PromptFormFactor -Choices ([ordered]@{ $T.KeyLaptop = 'Laptop'; $T.KeyDesktop = 'Desktop' }) -DefaultKey $T.KeyLaptop `
                 -Description @($T.PromptFormFactorDesc1, $T.PromptFormFactorDesc2)
         }
 
-        if (-not $usageResult) {
+        if (-not $environmentResult) {
             Write-Host ''
-            $usageResult = Read-WcdChoice -Prompt $T.PromptEnvironment -Choices ([ordered]@{ $T.KeyWorkstation = 'Workstation'; $T.KeyVdi = 'Vdi' }) -DefaultKey $T.KeyWorkstation `
-                -Description @($T.PromptUsageDesc1, $T.PromptUsageDesc2)
+            $environmentResult = Read-WcdChoice -Prompt $T.PromptEnvironment -Choices ([ordered]@{ $T.KeyWorkstation = 'Workstation'; $T.KeyVdi = 'Vdi' }) -DefaultKey $T.KeyWorkstation `
+                -Description @($T.PromptEnvironmentDesc1, $T.PromptEnvironmentDesc2)
         }
 
-        $usageLabel = Get-WcdChoiceLabel -Value $usageResult -Labels $T.Labels
+        $environmentLabel = Get-WcdChoiceLabel -Value $environmentResult -Labels $T.Labels
 
         if (-not $openAppsResult) {
             Write-Host ''
-            $openAppsResult = Read-WcdChoice -Prompt ($T.PromptOpenApps -f $usageLabel) -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyYes `
+            $openAppsResult = Read-WcdChoice -Prompt ($T.PromptOpenApps -f $environmentLabel) -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyYes `
                 -Description @($T.PromptOpenAppsDesc1, $T.PromptOpenAppsDesc2)
         }
 
@@ -1051,26 +1051,26 @@ function Resolve-WcdExecutionOptions {
             }
         }
 
-        if (-not $engineerResult -and @($OptionalToolCandidates).Count -gt 0) {
+        if (-not $optionalToolResult -and @($OptionalToolCandidates).Count -gt 0) {
             Write-Host ''
-            $engineerYesNo = Read-WcdChoice -Prompt $T.PromptEngineer -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyNo `
-                -Description @($T.PromptEngineerDesc1, $T.PromptEngineerDesc2)
-            if ($engineerYesNo -eq 'Yes') {
-                $engineerTypes = Read-WcdOptionalToolChoice -Candidates $OptionalToolCandidates
+            $optionalToolAnswer = Read-WcdChoice -Prompt $T.PromptOptionalTool -Choices ([ordered]@{ $T.KeyYes = 'Yes'; $T.KeyNo = 'No' }) -DefaultKey $T.KeyNo `
+                -Description @($T.PromptOptionalToolDesc1, $T.PromptOptionalToolDesc2)
+            if ($optionalToolAnswer -eq 'Yes') {
+                $optionalToolNames = Read-WcdOptionalToolChoice -Candidates $OptionalToolCandidates
             } else {
-                $engineerTypes = @()
+                $optionalToolNames = @()
             }
         }
     }
 
     # -OptionalTools accepts a comma-separated list of Application Target names.
-    if ($engineerTypes.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($engineerResult)) {
-        $engineerTypes = @($engineerResult -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($optionalToolNames.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($optionalToolResult)) {
+        $optionalToolNames = @($optionalToolResult -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     }
 
     if (-not $languageResult)  { $languageResult  = 'fr-CA' }
-    if (-not $deviceResult)    { $deviceResult    = 'Laptop' }
-    if (-not $usageResult)     { $usageResult     = 'Workstation' }
+    if (-not $formFactorResult)    { $formFactorResult    = 'Laptop' }
+    if (-not $environmentResult)     { $environmentResult     = 'Workstation' }
     if (-not $openAppsResult)  { $openAppsResult  = 'Yes' }
 
 
@@ -1080,10 +1080,10 @@ function Resolve-WcdExecutionOptions {
 
     return [pscustomobject]@{
         Language        = $languageResult
-        FormFactor      = $deviceResult
-        Environment     = $usageResult
+        FormFactor      = $formFactorResult
+        Environment     = $environmentResult
         OpenApps        = ($openAppsResult -eq 'Yes')
-        OptionalTools   = $engineerTypes
+        OptionalTools   = $optionalToolNames
         NewComputerName = $newNameResult
         JoinDomain      = $joinResult
     }
@@ -1226,9 +1226,9 @@ foreach ($mod in $modules) {
         $moduleStatus += [pscustomobject]@{
             Module         = $modName
             Status         = $T.StatusError
-            Etapes         = 0
-            Echecs         = 1
-            Avertissements = 0
+            Steps          = 0
+            Failures       = 1
+            Warnings       = 0
             Detail         = $msg
         }
         continue
@@ -1244,9 +1244,9 @@ foreach ($mod in $modules) {
         $moduleStatus += [pscustomobject]@{
             Module         = $modName
             Status         = $T.StatusError
-            Etapes         = 0
-            Echecs         = 1
-            Avertissements = 0
+            Steps          = 0
+            Failures       = 1
+            Warnings       = 0
             Detail         = $msg
         }
         continue
@@ -1354,9 +1354,9 @@ foreach ($mod in $modules) {
     $moduleStatus += [pscustomobject]@{
         Module         = $modName
         Status         = $statusLabel
-        Etapes         = $totalSteps
-        Echecs         = $failedSteps
-        Avertissements = $warningSteps
+        Steps          = $totalSteps
+        Failures       = $failedSteps
+        Warnings       = $warningSteps
         Detail         = $detail
     }
 }

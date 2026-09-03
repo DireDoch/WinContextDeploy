@@ -20,6 +20,24 @@ Describe 'Comment-based help' {
                     }
                 }
         })
+
+        # CONTEXT.md nomme Form Factor, Environment et Optional Tool. L'interface
+        # respectait deja ces mots; l'implementation avait derive vers device,
+        # usage et engineer, et l'objet $moduleStatus portait les trois seuls
+        # identifiants francais du depot.
+        #
+        # Le motif vise des identifiants precis, pas des sous-chaines:
+        # Config-DeviceManager, Get-WcdPnPDevices et Set-WcdDeviceManagerStatus
+        # sont corrects, et les chaines affichees 'Echecs: {0}' et
+        # 'Avertissements: {0}' sont du francais destine au technicien.
+        $script:StalePattern = @(
+            'DeviceType', 'Config-Usage', 'Config-Engineer', 'Minimal[A-Z]'
+            '\$deviceResult', '\$usageResult', '\$usageLabel', '\$engineer[A-Z]'
+            'PromptUsageDesc', 'PromptEngineer'
+            'Engineer(BoxTitle|CombineHint|ChoicePrompt|AtLeastOne|InvalidChoice|Selection)'
+            '\.(Etapes|Echecs|Avertissements)\b'
+            '(?m)^\s*(Etapes|Echecs|Avertissements)\s+='
+        ) -join '|'
     }
 
     It 'trouve les fonctions du projet' {
@@ -63,12 +81,27 @@ Describe 'Comment-based help' {
     }
 
     It 'ne mentionne plus les parametres et modules renommes' {
-        # -DeviceType -> -FormFactor, -Usage -> -Environment, Minimal* -> Wcd*,
-        # Config-Usage et Config-Engineer ont disparu.
         $stale = @(Get-ChildItem -Path (Join-Path $script:SrcDir '*.ps1') |
-            Select-String -Pattern 'DeviceType|Config-Usage|Config-Engineer|Minimal[A-Z]' |
+            Select-String -Pattern $script:StalePattern |
             ForEach-Object { '{0}:{1}' -f $_.Filename, $_.LineNumber })
 
         $stale -join ', ' | Should -BeNullOrEmpty
+    }
+
+    It 'ne signale pas les noms legitimes qui contiennent Device' {
+        # Le motif doit rester ancre sur les identifiants derivants. S'il attrape
+        # ceux-ci, il est trop large et sera desactive a la premiere fausse alerte.
+        $legitimate = @(
+            'Config-DeviceManager.ps1'
+            'Set-WcdDeviceManagerStatus -LogPath $logPath'
+            'Get-WcdPnPDevices'
+            "FailDetails             = 'Echecs: {0}'"
+            "WarningDetails          = 'Avertissements: {0}'"
+            "DeviceManager  = 'Device Manager'"
+        )
+
+        foreach ($line in $legitimate) {
+            $line | Should -Not -Match $script:StalePattern -Because ('"{0}" est correct' -f $line)
+        }
     }
 }
