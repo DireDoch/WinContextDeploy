@@ -195,6 +195,21 @@ Describe 'Config-Security' {
             foreach ($name in @('Domain', 'Private', 'Public')) { $result.Error | Should -Match $name }
         }
 
+        It 'avertit quand les trois profils ne sont pas tous rapportes' {
+            # Ne juger que les profils revenus rendrait vert un poste dont la
+            # lecture n en a ramene qu un, qui est le poste le plus a regarder.
+            Set-TestSecurityDefaults
+            Mock -CommandName 'Get-WcdFirewallProfileState' {
+                @([pscustomobject]@{ Name = 'Domain'; Enabled = $true })
+            }
+
+            $result = Set-WcdSecurityStatus -LogPath $script:LogPath | Where-Object Step -eq 'FirewallProfiles'
+
+            $result.Severity | Should -Be 'WARNING'
+            $result.Error | Should -Match 'Private'
+            $result.Error | Should -Match 'Public'
+        }
+
         It 'lit le magasin actif, pas la strategie configuree' {
             # Sans ActiveStore, la ligne rapporte ce que le poste a demande et
             # non ce que la strategie de groupe applique reellement.

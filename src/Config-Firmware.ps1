@@ -208,6 +208,16 @@ function Set-WcdFirmwareStatus {
         -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
         -FailureLabel 'Secure Boot' -FailureRemedy 'SecureBootUnreadable' `
         -Action {
+            # The boot mode already answered this, and it answered without
+            # Administrator. Asking for elevation to confirm something a legacy
+            # BIOS machine cannot have would send the technician to fetch rights
+            # that change nothing.
+            if ($firmwareType -eq 'Legacy') {
+                return @{ Severity = 'NA'
+                          Error    = 'Secure Boot does not apply: this machine booted legacy BIOS, as the boot mode row says.'
+                          Log      = 'Firmware: Secure Boot does not apply on a legacy BIOS machine.' }
+            }
+
             if ($requiresElevation) {
                 return @{ Severity  = 'WARNING'
                           Error     = 'Confirm-SecureBootUEFI requires Administrator.'

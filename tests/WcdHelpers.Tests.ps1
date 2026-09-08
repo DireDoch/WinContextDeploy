@@ -337,6 +337,24 @@ Describe 'WcdHelpers' {
             $report.context.build | Should -Be '26200.1234'
         }
 
+        It 'porte un DisplayVersion absent jusque dans le contexte du rapport' {
+            # Les builds anterieurs a DisplayVersion n en ont pas: le champ sort
+            # vide plutot que faux, et le rapport se produit quand meme.
+            Mock -CommandName 'Get-WcdMachineSerial' { '5CG2141ABC' }
+            Mock -CommandName 'Get-WcdMachineAssetTag' { '' }
+            Mock -CommandName 'Get-WcdOperatingSystemInfo' {
+                @{ Edition = 'Microsoft Windows 10 Pro'; DisplayVersion = ''; Build = '19045.4291' }
+            }
+
+            $report = New-WcdRunReport -ExecutionOptions ([pscustomobject]@{
+                FormFactor = 'Laptop'; Environment = 'Workstation'; Language = 'fr-CA'
+            })
+
+            $report.context.displayVersion | Should -Be ''
+            $report.context.edition | Should -Be 'Microsoft Windows 10 Pro'
+            $report.context.build | Should -Be '19045.4291'
+        }
+
         It 'joint CurrentBuild et UBR comme un technicien les cite' {
             Format-WcdWindowsBuild -CurrentBuild '26200' -Ubr '1234' | Should -Be '26200.1234'
         }

@@ -62,6 +62,18 @@ Describe 'Config-Power - sante de la pile' {
             $noBattery.Parsed | Should -BeTrue
             $noBattery.HasBattery | Should -BeFalse
         }
+
+        It 'ne lit pas un tableau qui a bouge comme une absence de pile' {
+            # Un rapport pour un poste qui a une pile cite des mWh partout:
+            # nominale, pleine charge, et chaque ligne d historique. Aucun chiffre
+            # veut dire aucune pile; un seul veut dire que le tableau a bouge, et
+            # c est justement la fragilite contre laquelle cette analyse est
+            # prevenue. Les confondre tairait la seconde.
+            $moved = ConvertFrom-WcdBatteryReport -Html '<html><table><tr><td>52,000 mWh</td></tr></table></html>'
+
+            $moved.Parsed | Should -BeFalse
+            $moved.HasBattery | Should -BeFalse
+        }
     }
 
     Context 'etat rapporte' {

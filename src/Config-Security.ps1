@@ -383,9 +383,11 @@ function Set-WcdSecurityStatus {
             }
 
             # Several keyed Windows entries on one install is unusual, but when
-            # it happens the worst status wins: an unactivated edition must not
-            # hide behind a licensed one. Unlicensed beats everything, then
-            # anything that is not plainly Licensed.
+            # it happens an unactivated edition must not hide behind a licensed
+            # one. Unlicensed wins outright; failing that, the first entry that
+            # is not plainly Licensed is reported. That is not a ranking among
+            # 2-6 and does not need to be - every one of them is a WARNING, so
+            # only the sentence differs, never the severity.
             $statuses = @($products | ForEach-Object { [int]$_.LicenseStatus })
             $notLicensed = @($statuses | Where-Object { $_ -ne 1 })
             $worstStatus = if ($statuses -contains 0) { 0 }
@@ -428,11 +430,26 @@ function Set-WcdSecurityStatus {
         -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
         -FailureLabel 'Firewall profiles' -FailureRemedy 'FirewallUnreadable' `
         -Action {
+            # Windows has exactly three profiles. Judging only the ones that came
+            # back would read green on a machine where the read returned one of
+            # them, which is the machine most worth looking at.
+            $expectedProfiles = @('Domain', 'Private', 'Public')
+
             $profiles = @(Get-WcdFirewallProfileState)
             if ($profiles.Count -eq 0) {
                 return @{ Severity = 'WARNING'
                           Error    = 'No firewall profile was returned.'
                           Log      = 'Security: no firewall profile returned.' }
+            }
+
+            $returned = @($profiles | ForEach-Object { [string]$_.Name })
+            $absent = @($expectedProfiles | Where-Object { $returned -notcontains $_ })
+            if ($absent.Count -gt 0) {
+                $message = 'The firewall did not report on: {0}.' -f ($absent -join ', ')
+                return @{ Severity  = 'WARNING'
+                          Error     = $message
+                          RemedyKey = 'FirewallUnreadable'
+                          Log       = 'Security: {0}' -f $message }
             }
 
             $disabled = @($profiles | Where-Object { -not $_.Enabled } | ForEach-Object { [string]$_.Name })

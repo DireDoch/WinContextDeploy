@@ -50,6 +50,11 @@ function ConvertFrom-WcdBatteryReport {
         Pulls the design and full-charge capacities out of a battery report.
 
     .DESCRIPTION
+        UNVERIFIED AGAINST HARDWARE. The table layout this reads comes from the
+        documented shape of the report rather than a real /batteryreport on a
+        real machine, and has not been spot-checked. Which is the reason for
+        everything below.
+
         The parse is the brittle part of this Step and is treated that way.
         /batteryreport emits HTML meant for a human, its field labels are
         localized, and its layout has changed across Windows builds - so nothing
@@ -96,8 +101,22 @@ function ConvertFrom-WcdBatteryReport {
         [int64]($_.Groups[1].Value -replace '[^\d]', '')
     })
 
-    if ($capacities.Count -lt 2) {
+    # None at all, and one, are different machines. A report for a machine that
+    # has a battery quotes mWh many times over - design, full charge, and every
+    # row of the capacity history - so no figure anywhere means no battery,
+    # while exactly one means the table this reads is not where it used to be.
+    # Collapsing them would report a report whose shape moved as Not Applicable,
+    # which is silence about the very brittleness this parse was warned about.
+    #
+    # ponytail: a count heuristic, because the labels that would say it outright
+    # are localized. Replace it with a positive no-battery marker once one has
+    # been confirmed on real hardware.
+    if ($capacities.Count -eq 0) {
         return @{ Parsed = $true; HasBattery = $false; DesignCapacity = 0; FullChargeCapacity = 0 }
+    }
+
+    if ($capacities.Count -lt 2) {
+        return $empty
     }
 
     return @{ Parsed             = $true

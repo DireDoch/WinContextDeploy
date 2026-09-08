@@ -116,6 +116,20 @@ Describe 'Config-Firmware' {
             $result.RemedyKey | Should -Be 'RequiresAdmin'
         }
 
+        It 'repond Non applicable sur un BIOS herite meme sans elevation' {
+            # Le mode d amorcage a deja repondu, et il a repondu sans droits.
+            # Demander une elevation pour confirmer ce qu un BIOS herite ne peut
+            # pas avoir enverrait le technicien chercher des droits inutiles.
+            Mock -CommandName 'Get-WcdFirmwareType' { 'Legacy' }
+            Mock -CommandName 'Get-WcdSecureBootState' { throw $script:NotSupported }
+
+            $result = Set-WcdFirmwareStatus -Elevated $false -LogPath $script:LogPath | Where-Object Step -eq 'SecureBootState'
+
+            $result.Severity | Should -Be 'NA'
+            $result.RemedyKey | Should -Not -Be 'RequiresAdmin'
+            Should -Invoke 'Get-WcdSecureBootState' -Times 0
+        }
+
         It 'rapporte proprement une applet absente' {
             Mock -CommandName 'Get-WcdFirmwareType' { 'UEFI' }
             Mock -CommandName 'Get-WcdSecureBootState' { $null }
