@@ -267,6 +267,7 @@ $T = if ($ScriptUI -eq 'EN') {
         FailDetails             = 'Failures: {0}'
         WarningDetails          = 'Warnings: {0}'
         SectionByModule         = 'FINAL DIAGNOSTIC - BY MODULE'
+        OperatingSystemLine     = 'Windows: {0}'
         SectionByStep           = 'FINAL DIAGNOSTIC - BY STEP'
         SummaryLine             = 'Summary: {0} OK, {1} warning(s), {2} error(s), {3} manual, {4} N/A.'
         LogOutput               = 'Full log: {0}'
@@ -471,6 +472,7 @@ $T = if ($ScriptUI -eq 'EN') {
         FailDetails             = 'Echecs: {0}'
         WarningDetails          = 'Avertissements: {0}'
         SectionByModule         = 'DIAGNOSTIC FINAL - PAR MODULE'
+        OperatingSystemLine     = 'Windows : {0}'
         SectionByStep           = 'DIAGNOSTIC FINAL - PAR ETAPE'
         SummaryLine             = 'Resume: {0} OK, {1} warning(s), {2} erreur(s), {3} manuel(le)(s), {4} N/A.'
         LogOutput               = 'Log complet: {0}'
@@ -1384,6 +1386,16 @@ $checklistErrorCount = @($checklistEntries | Where-Object { $_.Kind -eq 'error' 
 $checklistManualCount = @($checklistEntries | Where-Object { $_.Kind -eq 'manual' }).Count
 $checklistNaCount = @($checklistEntries | Where-Object { $_.Kind -eq 'na' }).Count
 $summaryLine = $T.SummaryLine -f $checklistSuccessCount, $checklistWarningCount, $checklistErrorCount, $checklistManualCount, $checklistNaCount
+
+# Which Windows this is, on one line, so the technician reading the checklist
+# does not have to leave the tool to find out. Machine context rather than a
+# Step: it cannot succeed or fail, so it gets no row and no status icon.
+$osLine = Format-WcdOperatingSystemLine -Info (Get-WcdOperatingSystemInfo)
+if (-not [string]::IsNullOrWhiteSpace($osLine)) {
+    Write-Host ''
+    Write-Host ($T.OperatingSystemLine -f $osLine) -ForegroundColor Gray
+    Write-WcdLog -Path $resolvedLogPath -Level 'INFO' -Message ($T.OperatingSystemLine -f $osLine)
+}
 
 Write-WcdSectionHeader -Title $T.SectionByModule
 foreach ($ms in $moduleStatus) {

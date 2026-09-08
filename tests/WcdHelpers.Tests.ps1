@@ -309,12 +309,67 @@ Describe 'WcdHelpers' {
         It 'produit quand meme un rapport quand une lecture CIM echoue' {
             Mock -CommandName 'Get-WcdMachineSerial' { '' }
             Mock -CommandName 'Get-WcdMachineAssetTag' { '' }
+            Mock -CommandName 'Get-WcdOperatingSystemInfo' { @{ Edition = ''; DisplayVersion = ''; Build = '' } }
 
             $report = New-WcdRunReport -ExecutionOptions $script:ReportOptions
 
             $report.schemaVersion | Should -Be 2
             $report.context.serialNumber | Should -Be ''
             $report.context.assetTag | Should -Be ''
+            $report.context.edition | Should -Be ''
+        }
+    }
+
+    Context 'edition, mise a jour de fonctionnalite et build' {
+        It 'porte les trois champs dans le contexte du rapport' {
+            Mock -CommandName 'Get-WcdMachineSerial' { '5CG2141ABC' }
+            Mock -CommandName 'Get-WcdMachineAssetTag' { '' }
+            Mock -CommandName 'Get-WcdOperatingSystemInfo' {
+                @{ Edition = 'Microsoft Windows 11 Pro'; DisplayVersion = '25H2'; Build = '26200.1234' }
+            }
+
+            $report = New-WcdRunReport -ExecutionOptions ([pscustomobject]@{
+                FormFactor = 'Laptop'; Environment = 'Workstation'; Language = 'fr-CA'
+            })
+
+            $report.context.edition | Should -Be 'Microsoft Windows 11 Pro'
+            $report.context.displayVersion | Should -Be '25H2'
+            $report.context.build | Should -Be '26200.1234'
+        }
+
+        It 'joint CurrentBuild et UBR comme un technicien les cite' {
+            Format-WcdWindowsBuild -CurrentBuild '26200' -Ubr '1234' | Should -Be '26200.1234'
+        }
+
+        It 'ne laisse pas un point qui traine quand UBR est absent' {
+            # Les vieux builds n ont pas d UBR.
+            Format-WcdWindowsBuild -CurrentBuild '19045' -Ubr '' | Should -Be '19045'
+            Format-WcdWindowsBuild -CurrentBuild '19045' -Ubr $null | Should -Be '19045'
+        }
+
+        It 'rend une chaine vide quand il n y a pas de build du tout' {
+            Format-WcdWindowsBuild -CurrentBuild '' -Ubr '1234' | Should -Be ''
+        }
+
+        It 'compose la ligne console en omettant ce qui manque' {
+            # Les vieux builds precedent DisplayVersion et n en ont pas: le champ
+            # sort vide plutot que faux, et la ligne ne montre pas un trou.
+            Format-WcdOperatingSystemLine -Info @{ Edition = 'Microsoft Windows 11 Pro'; DisplayVersion = '25H2'; Build = '26200.1234' } |
+                Should -Be 'Microsoft Windows 11 Pro  25H2  build 26200.1234'
+
+            Format-WcdOperatingSystemLine -Info @{ Edition = 'Microsoft Windows 10 Pro'; DisplayVersion = ''; Build = '19045.4291' } |
+                Should -Be 'Microsoft Windows 10 Pro  build 19045.4291'
+        }
+
+        It 'ne rend rien quand rien n a pu etre lu' {
+            Format-WcdOperatingSystemLine -Info @{ Edition = ''; DisplayVersion = ''; Build = '' } | Should -Be ''
+        }
+
+        It 'utilise DisplayVersion et jamais ReleaseId' {
+            # ReleaseId est fige a 2009 sur Windows 10 et faux sur tout
+            # Windows 11.
+            $source = Get-Content -Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/WcdHelpers.ps1') -Raw
+            $source | Should -Not -Match '\$version\.ReleaseId|-Name .ReleaseId.'
         }
     }
 

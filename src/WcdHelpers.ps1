@@ -484,6 +484,136 @@ function Get-WcdMachineAssetTag {
     }
 }
 
+function Format-WcdWindowsBuild {
+    <#
+    .SYNOPSIS
+        Joins CurrentBuild and UBR into the build number a technician quotes.
+
+    .DESCRIPTION
+        Windows reports the build in two registry values - 26200 and 1234 - and
+        every support conversation uses them joined, as 26200.1234. Split out
+        from the read so the joining is testable without the registry.
+
+        An older build with no UBR reports the build alone rather than a
+        trailing dot.
+
+    .PARAMETER CurrentBuild
+        The CurrentBuild value.
+
+    .PARAMETER Ubr
+        The UBR value, absent on some builds.
+
+    .OUTPUTS
+        [string] e.g. '26200.1234', or an empty string when there is no build.
+
+    .EXAMPLE
+        Format-WcdWindowsBuild -CurrentBuild '26200' -Ubr '1234'   # 26200.1234
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [string]$CurrentBuild,
+
+        [AllowNull()]
+        [string]$Ubr
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CurrentBuild)) { return '' }
+    if ([string]::IsNullOrWhiteSpace($Ubr)) { return $CurrentBuild.Trim() }
+
+    return '{0}.{1}' -f $CurrentBuild.Trim(), $Ubr.Trim()
+}
+
+function Get-WcdOperatingSystemInfo {
+    <#
+    .SYNOPSIS
+        Returns which Windows this machine is: edition, feature update and build.
+
+    .DESCRIPTION
+        The report and the history log record what was configured; neither
+        recorded what the machine is. A fleet collection that cannot answer
+        "which of these are still on 23H2" is missing the field that makes the
+        rest of it actionable, and an image built from a stale source produces a
+        machine several feature updates behind that the Windows Update Step will
+        not necessarily catch.
+
+        DisplayVersion, not ReleaseId. ReleaseId froze at 2009 on Windows 10 and
+        is wrong on every Windows 11 machine. Older builds predate
+        DisplayVersion and simply have neither; the field comes back empty
+        rather than wrong.
+
+        Deliberately not reporting an end-of-servicing date. That needs a table
+        of dates that goes stale the moment it ships and there is no inbox API
+        for it. Report the build; let whoever collects the JSON join it against
+        a servicing table they can keep current.
+
+        This is machine context, not work that can succeed or fail - the same
+        category as computerName and the Form Factor - so it is not a Step and
+        has no checklist row. A read that fails leaves the field empty rather
+        than costing a run its report.
+
+    .OUTPUTS
+        [hashtable] with Edition, DisplayVersion and Build, each possibly empty.
+
+    .EXAMPLE
+        (Get-WcdOperatingSystemInfo).DisplayVersion   # 25H2
+    #>
+    [CmdletBinding()]
+    param()
+
+    $edition = ''
+    try {
+        $osInfo = Get-CimInstance -ClassName 'Win32_OperatingSystem' -ErrorAction Stop
+        $edition = ([string]$osInfo.Caption).Trim()
+    } catch {
+    }
+
+    $displayVersion = ''
+    $build = ''
+    try {
+        $version = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+        $displayVersion = ([string]$version.DisplayVersion).Trim()
+        $build = Format-WcdWindowsBuild -CurrentBuild ([string]$version.CurrentBuild) -Ubr ([string]$version.UBR)
+    } catch {
+    }
+
+    return @{ Edition = $edition; DisplayVersion = $displayVersion; Build = $build }
+}
+
+function Format-WcdOperatingSystemLine {
+    <#
+    .SYNOPSIS
+        Renders the one console line naming which Windows this is.
+
+    .DESCRIPTION
+        So the technician reading the checklist can see which OS they are
+        looking at without leaving the tool. Whatever could not be read is left
+        out rather than printed as a blank or an "Unknown", and a machine where
+        nothing could be read prints nothing at all.
+
+    .PARAMETER Info
+        A hashtable from Get-WcdOperatingSystemInfo.
+
+    .OUTPUTS
+        [string] e.g. 'Windows 11 Pro  25H2  build 26200.1234', or empty.
+
+    .EXAMPLE
+        Format-WcdOperatingSystemLine -Info (Get-WcdOperatingSystemInfo)
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Info
+    )
+
+    $parts = @()
+    if (-not [string]::IsNullOrWhiteSpace($Info.Edition))        { $parts += [string]$Info.Edition }
+    if (-not [string]::IsNullOrWhiteSpace($Info.DisplayVersion)) { $parts += [string]$Info.DisplayVersion }
+    if (-not [string]::IsNullOrWhiteSpace($Info.Build))          { $parts += 'build {0}' -f $Info.Build }
+
+    return ($parts -join '  ')
+}
+
 function Test-WcdComputerName {
     <#
     .SYNOPSIS
@@ -1518,9 +1648,14 @@ function New-WcdRunReport {
         register, which is most of what collecting it is for. Neither read can
         fail the report: a machine where CIM refuses reports an empty string.
 
+        The edition, feature update and build say what the machine is, which
+        the report never recorded - only what was configured on it. A fleet
+        collection that cannot answer "which of these are still on 23H2" is
+        missing the field that makes the rest of it actionable.
+
         schemaVersion is present from the first release so a fleet collector
-        can version against it. It is 2: version 1 had no serialNumber and no
-        assetTag.
+        can version against it. It is 2: version 1 had none of serialNumber,
+        assetTag, edition, displayVersion or build.
 
     .PARAMETER ChecklistEntries
         Entries from Get-WcdFinalChecklistEntries: Step, Label, Kind, Detail.
@@ -1550,6 +1685,7 @@ function New-WcdRunReport {
 
     $entries = @($ChecklistEntries)
     $countOf = { param($kind) @($entries | Where-Object { $_.Kind -eq $kind }).Count }
+    $operatingSystem = Get-WcdOperatingSystemInfo
 
     return @{
         schemaVersion = 2
@@ -1562,6 +1698,9 @@ function New-WcdRunReport {
             language     = [string]$ExecutionOptions.Language
             serialNumber = (Get-WcdMachineSerial -Fallback '')
             assetTag     = (Get-WcdMachineAssetTag)
+            edition      = [string]$operatingSystem.Edition
+            displayVersion = [string]$operatingSystem.DisplayVersion
+            build        = [string]$operatingSystem.Build
         }
         summary       = @{
             ok            = (& $countOf 'success')

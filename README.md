@@ -329,7 +329,10 @@ console window, a plain text title is shown instead.
     "elevated": true,
     "language": "fr-CA",
     "serialNumber": "5CG2141ABC",
-    "assetTag": "ACME-004821"
+    "assetTag": "ACME-004821",
+    "edition": "Microsoft Windows 11 Pro",
+    "displayVersion": "25H2",
+    "build": "26200.1234"
   },
   "summary": { "ok": 14, "warning": 1, "error": 0, "manual": 7, "notApplicable": 1 },
   "steps": [
@@ -339,7 +342,8 @@ console window, a plain text title is shown instead.
 ```
 
 `schemaVersion` is there from the first release so a collector can version
-against it. It is `2`: version 1 carried no `serialNumber` and no `assetTag`.
+against it. It is `2`: version 1 carried none of `serialNumber`, `assetTag`,
+`edition`, `displayVersion` or `build`.
 
 `serialNumber` and `assetTag` are what make a fleet collection joinable.
 `computerName` was the only machine identifier here, and the tool now offers to
@@ -352,6 +356,19 @@ the OEM placeholders (`No Asset Tag`, `Not Specified`, a run of spaces) are
 normalised to an empty string so "no asset tag" looks the same on every machine.
 An absent asset tag is normal and nothing warns about it. A machine where either
 SMBIOS read fails still produces a report, with an empty string in that field.
+
+`edition`, `displayVersion` and `build` say what the machine *is*, which the
+report never recorded — only what was configured on it. A fleet collection that
+cannot answer "which of these are still on 23H2" is missing the field that makes
+the rest of it actionable. The same line is printed to the console just before
+the Diagnostic.
+
+`displayVersion` is read from `DisplayVersion`, not `ReleaseId` — `ReleaseId`
+froze at `2009` on Windows 10 and is wrong on every Windows 11 machine. Builds
+that predate `DisplayVersion` report it empty rather than wrong. There is
+deliberately no end-of-servicing date: that needs a table that goes stale the
+moment it ships and there is no inbox API for it. Join the build against a
+servicing table you keep current.
 
 ## Tests
 
