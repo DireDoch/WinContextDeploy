@@ -132,7 +132,9 @@ Describe 'WcdHelpers' {
         $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor `
             -Module @('Config-Power', 'Config-Applications') -Config $config -ExecutionOptions $executionOptions)
 
-        $plan['Config-Power'] | Should -Be @('ScreenTimeoutAc', 'SetActiveSchemeCurrent')
+        # FastStartup s applique aux deux Form Factors: c est un reglage
+        # d alimentation, pas un reglage de portable.
+        $plan['Config-Power'] | Should -Be @('ScreenTimeoutAc', 'SetActiveSchemeCurrent', 'FastStartup')
         # les cibles filtrees par environnement ne comptent pas dans la progression
         $plan['Config-Applications'] | Should -Be @('AppEverywhere', 'AppVdiOnly')
     }

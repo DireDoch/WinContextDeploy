@@ -262,4 +262,48 @@ Describe 'WcdDiagnostic' {
             (Get-WcdModuleStatusKind -Status 'ERREUR') | Should -Be 'error'
         }
     }
+
+    Context 'La ligne de redemarrage' {
+        BeforeAll {
+            function New-TestRestartLookup {
+                param([bool]$RestartPending, [bool]$FastStartup)
+
+                $lookup = @{}
+                if ($RestartPending) {
+                    $lookup['ComputerName'] = @([pscustomobject]@{ Step = 'ComputerName'; Success = $true; Severity = 'INFO'; Applied = $true })
+                }
+                $lookup['FastStartup'] = @([pscustomobject]@{
+                    Step               = 'FastStartup'
+                    Success            = $true
+                    Severity           = $(if ($FastStartup) { 'WARNING' } else { 'INFO' })
+                    FastStartupEnabled = $FastStartup
+                })
+                return $lookup
+            }
+        }
+
+        It 'porte le demarrage rapide quand un redemarrage est deja en attente' {
+            # Deux lignes de redemarrage se liraient comme deux redemarrages, donc
+            # celle qui existe deja porte la mise en garde.
+            $entry = Resolve-WcdRestartEntry -ResultLookup (New-TestRestartLookup -RestartPending $true -FastStartup $true)
+
+            $entry.Kind | Should -Be 'manual'
+            $entry.Detail | Should -Match ([regex]::Escape($script:T.RestartManualDetail))
+            $entry.Detail | Should -Match ([regex]::Escape($script:T.RestartFastStartupDetail))
+        }
+
+        It 'ne dit rien du demarrage rapide quand il est desactive' {
+            $entry = Resolve-WcdRestartEntry -ResultLookup (New-TestRestartLookup -RestartPending $true -FastStartup $false)
+
+            $entry.Detail | Should -Be $script:T.RestartManualDetail
+        }
+
+        It 'ne leve pas de ligne de redemarrage pour le seul demarrage rapide' {
+            # Le demarrage rapide seul est sa propre ligne, pas un redemarrage.
+            $entry = Resolve-WcdRestartEntry -ResultLookup (New-TestRestartLookup -RestartPending $false -FastStartup $true)
+
+            $entry | Should -BeNullOrEmpty
+        }
+    }
+
 }

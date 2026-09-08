@@ -180,6 +180,7 @@ $T = if ($ScriptUI -eq 'EN') {
             TimeZone       = 'Timezone'
             TimeSync       = 'Time sync'
             Battery        = 'Battery health'
+            FastStartup    = 'Fast Startup'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -252,6 +253,7 @@ $T = if ($ScriptUI -eq 'EN') {
         RestartManualDetail     = 'New computer name / domain membership takes effect after a restart.'
         RestartUpdateManualDetail = 'An installed Windows update is waiting on a restart.'
         RestartBothManualDetail = 'One restart covers both: the new computer name / domain membership, and an installed Windows update waiting on it.'
+        RestartFastStartupDetail = 'Fast Startup is on, so pick Restart and not Shut down; a shutdown hibernates the kernel session and the pending work does not apply.'
         SecondaryNA             = 'Not applicable to the chosen Form Factor or Environment.'
         DeskWindowsDetail       = 'Must be done manually on the Windows desktop.'
         StepCount               = 'step(s)'
@@ -334,6 +336,7 @@ $T = if ($ScriptUI -eq 'EN') {
             TimeSyncUnparseable = 'The Windows Time status could not be read. Run "w32tm /query /status" by hand before handover.'
             BatteryWorn         = 'The battery holds {0}% of its design capacity. Replace it before deployment, or deploy the machine as a desk-bound one and note it.'
             BatteryReportUnreadable = 'The battery report could not be read. Run "powercfg /batteryreport" by hand to see why.'
+            FastStartupOn       = 'Pending updates and firmware changes will not apply on "Shut down". Use Restart, or turn Fast Startup off before handover.'
         }
     }
 } else {
@@ -381,6 +384,7 @@ $T = if ($ScriptUI -eq 'EN') {
             TimeZone       = 'Fuseau horaire'
             TimeSync       = 'Synchronisation de l heure'
             Battery        = 'Sante de la pile'
+            FastStartup    = 'Demarrage rapide'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -453,6 +457,7 @@ $T = if ($ScriptUI -eq 'EN') {
         RestartManualDetail     = 'Le nouveau nom du poste et l appartenance au domaine prennent effet apres un redemarrage.'
         RestartUpdateManualDetail = 'Une mise a jour Windows installee attend un redemarrage.'
         RestartBothManualDetail = 'Un seul redemarrage suffit: le nouveau nom du poste et l appartenance au domaine, et une mise a jour Windows installee qui l attend.'
+        RestartFastStartupDetail = 'Le demarrage rapide est actif, donc choisir Redemarrer et non Arreter; un arret met la session du noyau en veille prolongee et le travail en attente ne s applique pas.'
         SecondaryNA             = 'Non applicable au type de poste ou a l usage choisi.'
         DeskWindowsDetail       = 'A faire manuellement sur le bureau Windows.'
         StepCount               = 'etape(s)'
@@ -535,6 +540,7 @@ $T = if ($ScriptUI -eq 'EN') {
             TimeSyncUnparseable = 'L etat du service de temps Windows n a pas pu etre lu. Lancer "w32tm /query /status" a la main avant la remise.'
             BatteryWorn         = 'La pile retient {0}% de sa capacite nominale. La remplacer avant le deploiement, ou deployer le poste comme poste fixe et le noter.'
             BatteryReportUnreadable = 'Le rapport de pile n a pas pu etre lu. Lancer "powercfg /batteryreport" a la main pour voir pourquoi.'
+            FastStartupOn       = 'Les mises a jour en attente et les changements au micrologiciel ne s appliqueront pas sur "Arreter". Utiliser Redemarrer, ou desactiver le demarrage rapide avant la remise.'
         }
     }
 }

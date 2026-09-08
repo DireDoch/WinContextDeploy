@@ -20,12 +20,14 @@ Describe 'Config-Power' {
         # La sante de la pile est une etape a part entiere depuis #27, et elle
         # produit un Resultat de plus sur un portable.
         Mock -CommandName 'Get-WcdBatteryReportHtml' { '<html><td>52,000 mWh</td><td>48,900 mWh</td></html>' }
+        Mock -CommandName 'Get-WcdFastStartupValue' { 0 }
 
         $results = Set-WcdPowerConfiguration -FormFactor 'Laptop' -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
-            $results.Count | Should -Be 6
+            $results.Count | Should -Be 7
             ($results | Where-Object Step -eq 'BatteryHealth').Success | Should -BeTrue
+            ($results | Where-Object Step -eq 'FastStartup').Success | Should -BeTrue
             ($results | Where-Object Step -eq 'ScreenTimeoutBattery').Success | Should -BeTrue
             ($results | Where-Object Step -eq 'ScreenTimeoutAc').Success | Should -BeTrue
             ($results | Where-Object Step -eq 'LidActionAcNone').Success | Should -BeTrue
@@ -36,8 +38,9 @@ Describe 'Config-Power' {
             Get-Content -Path $logPath -Raw | Should -Match 'lid close on battery set to do nothing'
             Get-Content -Path $logPath -Raw | Should -Match 'active scheme applied'
         } else {
-            $results.Count | Should Be 6
+            $results.Count | Should Be 7
             ($results | Where-Object Step -eq 'BatteryHealth').Success | Should Be $true
+            ($results | Where-Object Step -eq 'FastStartup').Success | Should Be $true
             ($results | Where-Object Step -eq 'ScreenTimeoutBattery').Success | Should Be $true
             ($results | Where-Object Step -eq 'ScreenTimeoutAc').Success | Should Be $true
             ($results | Where-Object Step -eq 'LidActionAcNone').Success | Should Be $true
@@ -55,18 +58,20 @@ Describe 'Config-Power' {
 
         Mock -CommandName 'Invoke-WcdPowerCfg' {}
         Mock -CommandName 'Get-WcdBatteryReportHtml' { '<html><td>52,000 mWh</td><td>48,900 mWh</td></html>' }
+        Mock -CommandName 'Get-WcdFastStartupValue' { 0 }
 
         $results = Set-WcdPowerConfiguration -FormFactor 'Desktop' -LogPath $logPath
 
         if ($script:PesterMajorVersion -ge 5) {
-            $results.Count | Should -Be 2
+            # FastStartup s ajoute aux deux Form Factors; le capot et la pile non.
+            $results.Count | Should -Be 3
             ($results | Where-Object Step -eq 'ScreenTimeoutBattery') | Should -BeNullOrEmpty
             ($results | Where-Object Step -eq 'SleepBatteryNever') | Should -BeNullOrEmpty
             ($results | Where-Object Step -eq 'LidActionAcNone') | Should -BeNullOrEmpty
             ($results | Where-Object Step -eq 'LidActionBatteryNone') | Should -BeNullOrEmpty
             ($results | Where-Object Step -eq 'BatteryHealth') | Should -BeNullOrEmpty
         } else {
-            $results.Count | Should Be 2
+            $results.Count | Should Be 3
             ($results | Where-Object Step -eq 'ScreenTimeoutBattery') | Should BeNullOrEmpty
             ($results | Where-Object Step -eq 'SleepBatteryNever') | Should BeNullOrEmpty
             ($results | Where-Object Step -eq 'LidActionAcNone') | Should BeNullOrEmpty

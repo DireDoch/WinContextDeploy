@@ -163,6 +163,89 @@ function Get-WcdBatteryHealthInfo {
               Label    = ('The battery holds {0}% of its design capacity.' -f $percent) }
 }
 
+function Get-WcdFastStartupValue {
+    <#
+    .SYNOPSIS
+        Returns the HiberbootEnabled value, which is what Fast Startup is.
+
+    .DESCRIPTION
+        Thin wrapper over one HKLM read, so the Step has a seam the tests can
+        mock. HKLM reads are open to any user, so this needs no elevation.
+
+        Read only. Nothing in this Module writes the key: turning Fast Startup
+        off is a fleet policy decision, and this Step's job is to say what it is
+        - the same posture the BitLocker Module takes on encryption. A site that
+        wants it off everywhere should get an explicit manifest opt-in as a
+        follow-up rather than a tool that quietly flips it.
+
+    .OUTPUTS
+        [int] The value, or $null when the value or the key is absent.
+
+    .EXAMPLE
+        Get-WcdFastStartupValue   # 1
+    #>
+    [CmdletBinding()]
+    param()
+
+    $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'
+    try {
+        $value = (Get-ItemProperty -Path $key -Name 'HiberbootEnabled' -ErrorAction Stop).HiberbootEnabled
+        if ($null -eq $value) { return $null }
+        return [int]$value
+    } catch {
+        return $null
+    }
+}
+
+function Get-WcdFastStartupInfo {
+    <#
+    .SYNOPSIS
+        Turns the HiberbootEnabled value into a severity and a label.
+
+    .DESCRIPTION
+        Fast Startup means "Shut down" does not shut down - it hibernates the
+        kernel session. On a bench that breaks the two things a technician uses
+        shutdown for: pending updates that need a real restart do not apply, and
+        a machine powered off for imaging or a firmware change comes back in the
+        state it left.
+
+        An absent value is enabled, not an error. Fast Startup is on by default
+        and Windows does not write the key until something changes it, so
+        treating "absent" as "off" would report the default case as clean.
+
+        Applies to both Form Factors. Fast Startup is not laptop-specific.
+
+    .PARAMETER Value
+        What Get-WcdFastStartupValue returned.
+
+    .OUTPUTS
+        [hashtable] with Severity, Label, Enabled and, when on, RemedyKey.
+
+    .EXAMPLE
+        Get-WcdFastStartupInfo -Value 0
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        $Value
+    )
+
+    if ($null -ne $Value -and [int]$Value -eq 0) {
+        return @{ Severity = 'INFO'; Enabled = $false; Label = 'Fast Startup is off, so "Shut down" really shuts the machine down.' }
+    }
+
+    $label = if ($null -eq $Value) {
+        'Fast Startup is on (the value is absent, which is the default and means on).'
+    } else {
+        'Fast Startup is on.'
+    }
+
+    return @{ Severity  = 'WARNING'
+              Enabled   = $true
+              Label     = $label
+              RemedyKey = 'FastStartupOn' }
+}
+
 function Set-WcdPowerConfiguration {
     <#
     .SYNOPSIS
@@ -278,6 +361,24 @@ function Set-WcdPowerConfiguration {
             }
     }
 
+    # --- Fast Startup, which quietly makes a pending restart not count -------
+    $results += Invoke-WcdStep -Module $moduleName -Key 'FastStartup' `
+        -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+        -FailureLabel 'Fast Startup' -FailureRemedy 'FastStartupOn' `
+        -Action {
+            # No elevation check: HKLM reads are open, so this Step keeps
+            # answering on a run that could do nothing else in this Module.
+            $info = Get-WcdFastStartupInfo -Value (Get-WcdFastStartupValue)
+            $fragment = @{ Severity           = $info.Severity
+                           Error              = $info.Label
+                           # Read by the restart row, which has to say "Restart,
+                           # not Shut down" when both apply.
+                           FastStartupEnabled = $info.Enabled
+                           Log                = 'Power: {0}' -f $info.Label }
+            if ($info.ContainsKey('RemedyKey')) { $fragment['RemedyKey'] = $info.RemedyKey }
+            return $fragment
+        }
+
     # --- Battery wear, which only a Laptop can have --------------------------
     if ($laptopOnly) {
         $wearRatio = $script:WcdBatteryWearWarningRatio
@@ -322,7 +423,7 @@ function Get-WcdPowerDescriptor {
         Declares what Config-Power contributes to the run.
 
     .DESCRIPTION
-        Six Steps on a Laptop and two on a Desktop. The battery and lid Steps are
+        Seven Steps on a Laptop and three on a Desktop. The battery and lid Steps are
         Not Applicable to a Desktop, so they are declared but not planned - the
         label survives for the diagnostic, the progress bar cannot overshoot.
 
@@ -373,6 +474,7 @@ function Get-WcdPowerDescriptor {
         @{ Key = 'LidActionBatteryNone';   Label = 'Lid close on battery: do nothing'; Planned = $laptop }
         @{ Key = 'SetActiveSchemeCurrent'; Label = 'Active power scheme';             Planned = $true }
         @{ Key = 'BatteryHealth';          Label = 'Battery health';                  Planned = $laptop }
+        @{ Key = 'FastStartup';            Label = 'Fast Startup';                    Planned = $true }
     )
 
     # A Desktop has no battery to wear out, so the row states that rather than
@@ -390,8 +492,9 @@ function Get-WcdPowerDescriptor {
         Steps    = $steps
         Rows     = @(
             @{ Label = $Translations.Checklist.Power
-               Steps = @($steps | Where-Object { $_.Planned -and $_.Key -ne 'BatteryHealth' } | ForEach-Object { $_.Key }) }
+               Steps = @($steps | Where-Object { $_.Planned -and @('BatteryHealth', 'FastStartup') -notcontains $_.Key } | ForEach-Object { $_.Key }) }
             $batteryRow
+            @{ Label = $Translations.Checklist.FastStartup; Steps = @('FastStartup') }
         )
         Invoke   = {
             param($ctx)

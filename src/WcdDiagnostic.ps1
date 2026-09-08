@@ -546,6 +546,12 @@ function Resolve-WcdRestartEntry {
         already has succeeds without changing anything a restart takes effect
         for.
 
+        Fast Startup joins the same row rather than raising a second one. When
+        it is on, "Shut down" hibernates the kernel session instead of shutting
+        down, and the pending work does not apply - so the row that already says
+        a restart is needed is the row that has to say Restart and not Shut
+        down. Two rows would read as two restarts.
+
     .PARAMETER ResultLookup
         Step key -> Results.
 
@@ -574,6 +580,15 @@ function Resolve-WcdRestartEntry {
         $T.RestartUpdateManualDetail
     } else {
         $T.RestartManualDetail
+    }
+
+    # Only when something is already waiting on a restart does Fast Startup
+    # change what the technician has to do. On a machine with nothing pending it
+    # is its own row and nothing more.
+    $fastStartupOn = @(Get-WcdResultsForSteps -ResultLookup $ResultLookup -StepKeys @('FastStartup') |
+        Where-Object { $_.FastStartupEnabled })
+    if ($fastStartupOn.Count -gt 0) {
+        $detail = '{0} {1}' -f $detail, $T.RestartFastStartupDetail
     }
 
     return New-WcdDiagnosticEntry -Label $T.Checklist.RestartNeeded -Kind 'manual' -Detail $detail
