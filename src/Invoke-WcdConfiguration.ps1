@@ -179,6 +179,7 @@ $T = if ($ScriptUI -eq 'EN') {
             SecureBoot     = 'Secure Boot'
             TimeZone       = 'Timezone'
             TimeSync       = 'Time sync'
+            Battery        = 'Battery health'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -331,6 +332,8 @@ $T = if ($ScriptUI -eq 'EN') {
             TimeSourceCmos      = 'The Windows Time service has no source. Check the machine can reach the domain controllers on UDP 123.'
             TimeNeverSynced     = 'Resync manually and confirm it takes, before the machine leaves.'
             TimeSyncUnparseable = 'The Windows Time status could not be read. Run "w32tm /query /status" by hand before handover.'
+            BatteryWorn         = 'The battery holds {0}% of its design capacity. Replace it before deployment, or deploy the machine as a desk-bound one and note it.'
+            BatteryReportUnreadable = 'The battery report could not be read. Run "powercfg /batteryreport" by hand to see why.'
         }
     }
 } else {
@@ -377,6 +380,7 @@ $T = if ($ScriptUI -eq 'EN') {
             SecureBoot     = 'Demarrage securise'
             TimeZone       = 'Fuseau horaire'
             TimeSync       = 'Synchronisation de l heure'
+            Battery        = 'Sante de la pile'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -529,6 +533,8 @@ $T = if ($ScriptUI -eq 'EN') {
             TimeSourceCmos      = 'Le service de temps Windows n a aucune source. Verifier que le poste joint les controleurs de domaine sur UDP 123.'
             TimeNeverSynced     = 'Resynchroniser a la main et confirmer que cela tient, avant que le poste parte.'
             TimeSyncUnparseable = 'L etat du service de temps Windows n a pas pu etre lu. Lancer "w32tm /query /status" a la main avant la remise.'
+            BatteryWorn         = 'La pile retient {0}% de sa capacite nominale. La remplacer avant le deploiement, ou deployer le poste comme poste fixe et le noter.'
+            BatteryReportUnreadable = 'Le rapport de pile n a pas pu etre lu. Lancer "powercfg /batteryreport" a la main pour voir pourquoi.'
         }
     }
 }
