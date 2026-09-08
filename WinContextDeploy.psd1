@@ -225,6 +225,32 @@
     }
 
     # =========================================================================
+    # LOCAL ADMINISTRATOR
+    # =========================================================================
+    # The posture your security baseline expects of the built-in Administrator
+    # account. Uncomment the block to have the checklist compare against it.
+    #
+    #   LocalAdministrator = @{
+    #       Enabled = $false      # expect the account to be disabled
+    #       Renamed = $true       # expect the name to differ from the default
+    #   }
+    #
+    # Leave the block out entirely and the row reports what the machine has and
+    # judges nothing. A shop with no baseline should not be warned for not
+    # having one. Either key can be omitted on its own.
+    #
+    # REPORT ONLY. Nothing in this tool renames or disables the account, and
+    # that is deliberate: disabling the built-in Administrator before
+    # confirming another account can elevate can lock a technician out of a
+    # machine on the bench. That decision belongs to whatever owns your
+    # security baseline, not to a checklist.
+    #
+    # The account is found by its SID ending in -500, never by name, because
+    # the name is exactly what may have been changed - and because it is
+    # Administrateur on a French Windows.
+    # =========================================================================
+
+    # =========================================================================
     # TIMEZONE
     # =========================================================================
     # The timezone every machine in this fleet is expected to be in, as the Id

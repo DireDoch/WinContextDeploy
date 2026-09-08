@@ -25,11 +25,19 @@ Describe 'Config-Security' {
             )
         }
 
+        # Le compte est trouve par le SID en -500, jamais par le nom: c est le
+        # nom qui peut avoir change, et il est localise.
+        function New-TestAdminAccount {
+            param([string]$Name = 'Administrator', [bool]$Enabled = $false, [string]$Sid = 'S-1-5-21-1111111111-2222222222-3333333333-500')
+            [pscustomobject]@{ Name = $Name; Enabled = $Enabled; SID = $Sid }
+        }
+
         # Un plancher sain que chaque test remplace pour l etape qu il vise.
         function Set-TestSecurityDefaults {
             Mock -CommandName 'Get-WcdWindowsLicenseProduct' { @(New-TestLicense -Status 1) }
             Mock -CommandName 'Get-WcdDefenderStatus' { New-TestDefender }
             Mock -CommandName 'Get-WcdFirewallProfileState' { New-TestFirewall }
+            Mock -CommandName 'Get-WcdLocalAdministratorAccount' { New-TestAdminAccount }
         }
     }
 
@@ -200,14 +208,106 @@ Describe 'Config-Security' {
             Set-TestSecurityDefaults
             $results = @(Set-WcdSecurityStatus -LogPath $script:LogPath)
 
-            $results.Count | Should -Be 3
-            @($results | ForEach-Object { $_.Step }) | Should -Be @('WindowsActivation', 'AntivirusStatus', 'FirewallProfiles')
+            $results.Count | Should -Be 4
+            @($results | ForEach-Object { $_.Step }) | Should -Be @('WindowsActivation', 'AntivirusStatus', 'FirewallProfiles', 'LocalAdminPosture')
         }
 
         It 'ne change rien sur le poste' {
             # Lecture seule: aucune applet qui ecrit ne doit apparaitre ici.
             $source = Get-Content -Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/Config-Security.ps1') -Raw
             $source | Should -Not -Match 'Set-MpPreference|Set-NetFirewallProfile|Enable-NetFirewallRule|Set-CimInstance'
+        }
+    }
+
+    Context 'posture de l Administrateur integre' {
+        BeforeEach {
+            Set-TestSecurityDefaults
+        }
+
+        It 'rapporte OK quand la posture correspond a la reference' {
+            Mock -CommandName 'Get-WcdLocalAdministratorAccount' { New-TestAdminAccount -Name 'ADM-LOCAL' -Enabled $false }
+
+            $result = Set-WcdSecurityStatus -LocalAdministrator @{ Enabled = $false; Renamed = $true } -LogPath $script:LogPath |
+                Where-Object Step -eq 'LocalAdminPosture'
+
+            $result.Severity | Should -Be 'INFO'
+            $result.Error | Should -Match 'matches the expected posture'
+        }
+
+        It 'avertit quand le compte est actif alors qu il devrait etre desactive' {
+            Mock -CommandName 'Get-WcdLocalAdministratorAccount' { New-TestAdminAccount -Name 'ADM-LOCAL' -Enabled $true }
+
+            $result = Set-WcdSecurityStatus -LocalAdministrator @{ Enabled = $false; Renamed = $true } -LogPath $script:LogPath |
+                Where-Object Step -eq 'LocalAdminPosture'
+
+            $result.Severity | Should -Be 'WARNING'
+            $result.RemedyKey | Should -Be 'LocalAdminPosture'
+            $result.Error | Should -Match 'expects it disabled'
+        }
+
+        It 'avertit quand le nom par defaut subsiste alors qu un renommage est attendu' {
+            Mock -CommandName 'Get-WcdLocalAdministratorAccount' { New-TestAdminAccount -Name 'Administrator' -Enabled $false }
+
+            $result = Set-WcdSecurityStatus -LocalAdministrator @{ Enabled = $false; Renamed = $true } -LogPath $script:LogPath |
+                Where-Object Step -eq 'LocalAdminPosture'
+
+            $result.Severity | Should -Be 'WARNING'
+            $result.Error | Should -Match 'still has the default name'
+        }
+
+        It 'reconnait le nom par defaut francais comme non renomme' {
+            # Un poste francais qui a toujours Administrateur n a pas ete
+            # renomme, et ne doit pas se lire comme s il l avait ete.
+            $info = Get-WcdLocalAdminPostureInfo -Account (New-TestAdminAccount -Name 'Administrateur' -Enabled $false) `
+                -Expected @{ Renamed = $true }
+
+            $info.Severity | Should -Be 'WARNING'
+            $info.Label | Should -Match 'still has the default name'
+        }
+
+        It 'trouve un compte renomme par son SID' {
+            # Get-LocalUser -Name Administrator echouerait sur exactement les
+            # postes correctement configures, d ou le filtre sur -500.
+            $accounts = @(
+                [pscustomobject]@{ Name = 'Invite';    Enabled = $false; SID = 'S-1-5-21-1-2-3-501' }
+                [pscustomobject]@{ Name = 'ADM-LOCAL'; Enabled = $false; SID = 'S-1-5-21-1-2-3-500' }
+                [pscustomobject]@{ Name = 'technicien'; Enabled = $true;  SID = 'S-1-5-21-1-2-3-1001' }
+            )
+            $found = @($accounts | Where-Object { [string]$_.SID -like '*-500' }) | Select-Object -First 1
+
+            $found.Name | Should -Be 'ADM-LOCAL'
+        }
+
+        It 'ne juge rien quand le manifeste ne declare aucune reference' {
+            # Un atelier sans reference de securite ne doit pas etre averti de ne
+            # pas en avoir une.
+            Mock -CommandName 'Get-WcdLocalAdministratorAccount' { New-TestAdminAccount -Name 'Administrator' -Enabled $true }
+
+            $result = Set-WcdSecurityStatus -LogPath $script:LogPath | Where-Object Step -eq 'LocalAdminPosture'
+
+            $result.Severity | Should -Be 'INFO'
+            $result.Error | Should -Match 'Administrator'
+        }
+
+        It 'avertit quand aucun compte -500 n existe' {
+            Mock -CommandName 'Get-WcdLocalAdministratorAccount' { $null }
+
+            $result = Set-WcdSecurityStatus -LogPath $script:LogPath | Where-Object Step -eq 'LocalAdminPosture'
+
+            $result.Severity | Should -Be 'WARNING'
+        }
+
+        It 'trouve le compte par le suffixe de SID, pas par le nom' {
+            $source = Get-Content -Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/Config-Security.ps1') -Raw
+            $source | Should -Match ([regex]::Escape("Get-LocalUser -ErrorAction Stop | Where-Object { [string]`$_.SID -like '*-500' }"))
+        }
+
+        It 'ne peut ni renommer ni desactiver le compte' {
+            # La ligne que ce Module ne franchit pas: desactiver l Administrateur
+            # integre sans confirmer qu un autre compte peut elever peut enfermer
+            # un technicien hors du poste.
+            $source = Get-Content -Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/Config-Security.ps1') -Raw
+            $source | Should -Not -Match 'Rename-LocalUser|Disable-LocalUser|Set-LocalUser|Enable-LocalUser'
         }
     }
 }
