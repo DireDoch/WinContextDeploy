@@ -405,6 +405,85 @@ function Get-WcdMachineSerial {
     return $Fallback
 }
 
+function Format-WcdAssetTag {
+    <#
+    .SYNOPSIS
+        Normalises an SMBIOS asset tag, turning OEM placeholders into an empty
+        string.
+
+    .DESCRIPTION
+        SMBIOSAssetTag is populated by whoever provisions the hardware, not by
+        Windows, so most OEM machines ship it blank or holding a placeholder -
+        'No Asset Tag', 'Not Specified', 'To Be Filled By O.E.M.', or a run of
+        spaces.
+
+        All of those mean the same thing and all of them become an empty string.
+        A fleet collector joining this report to an asset register needs "there
+        is no asset tag" to look the same on every machine; an absent tag is
+        normal rather than a finding, and nothing warns about it.
+
+        Split out from the CIM read so the classification is testable without
+        Get-CimInstance, which does not exist off Windows.
+
+        UNVERIFIED AGAINST HARDWARE. The placeholder strings come from community
+        references rather than a Learn page and have not been spot-checked on
+        real hardware. An unrecognised placeholder passes through as a tag,
+        which shows a technician something odd rather than hiding it.
+
+    .PARAMETER RawTag
+        The raw SMBIOSAssetTag value.
+
+    .OUTPUTS
+        [string] The trimmed tag, or an empty string.
+
+    .EXAMPLE
+        Format-WcdAssetTag -RawTag 'No Asset Tag'   # ''
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [string]$RawTag
+    )
+
+    $placeholders = @('no asset tag', 'asset tag', 'not specified', 'none', 'unknown', 'to be filled by o.e.m.')
+
+    if ([string]::IsNullOrWhiteSpace($RawTag)) { return '' }
+    if ($placeholders -contains $RawTag.Trim().ToLowerInvariant()) { return '' }
+
+    return $RawTag.Trim()
+}
+
+function Get-WcdMachineAssetTag {
+    <#
+    .SYNOPSIS
+        Returns the asset tag whoever provisioned the hardware wrote into SMBIOS.
+
+    .DESCRIPTION
+        Read from Win32_SystemEnclosure and normalised by Format-WcdAssetTag.
+        A machine where the read fails answers an empty string rather than
+        throwing: an absent asset tag must never cost a run its report.
+
+        UNVERIFIED AGAINST HARDWARE. The SMBIOSAssetTag property name comes from
+        a community reference rather than a Learn page and has not been
+        spot-checked on real hardware.
+
+    .OUTPUTS
+        [string] The asset tag, or an empty string.
+
+    .EXAMPLE
+        Get-WcdMachineAssetTag   # ACME-004821
+    #>
+    [CmdletBinding()]
+    param()
+
+    try {
+        $enclosure = @(Get-CimInstance -ClassName 'Win32_SystemEnclosure' -ErrorAction Stop) | Select-Object -First 1
+        return (Format-WcdAssetTag -RawTag ([string]$enclosure.SMBIOSAssetTag))
+    } catch {
+        return ''
+    }
+}
+
 function Test-WcdComputerName {
     <#
     .SYNOPSIS
@@ -1432,8 +1511,16 @@ function New-WcdRunReport {
         with ConvertTo-Json -Depth 5 or deeper: the default depth of 2 silently
         flattens the steps array into type names.
 
+        The serial number and the asset tag are what make a fleet collection
+        joinable. computerName was the only machine identifier here, and the
+        tool now offers to change it, to a site convention that is usually not
+        the asset tag - so the JSON could not be joined back to an asset
+        register, which is most of what collecting it is for. Neither read can
+        fail the report: a machine where CIM refuses reports an empty string.
+
         schemaVersion is present from the first release so a fleet collector
-        can version against it.
+        can version against it. It is 2: version 1 had no serialNumber and no
+        assetTag.
 
     .PARAMETER ChecklistEntries
         Entries from Get-WcdFinalChecklistEntries: Step, Label, Kind, Detail.
@@ -1465,14 +1552,16 @@ function New-WcdRunReport {
     $countOf = { param($kind) @($entries | Where-Object { $_.Kind -eq $kind }).Count }
 
     return @{
-        schemaVersion = 1
+        schemaVersion = 2
         timestamp     = [DateTimeOffset]::Now.ToString('o')
         computerName  = $env:COMPUTERNAME
         context       = @{
-            formFactor  = [string]$ExecutionOptions.FormFactor
-            environment = [string]$ExecutionOptions.Environment
-            elevated    = $Elevated
-            language    = [string]$ExecutionOptions.Language
+            formFactor   = [string]$ExecutionOptions.FormFactor
+            environment  = [string]$ExecutionOptions.Environment
+            elevated     = $Elevated
+            language     = [string]$ExecutionOptions.Language
+            serialNumber = (Get-WcdMachineSerial -Fallback '')
+            assetTag     = (Get-WcdMachineAssetTag)
         }
         summary       = @{
             ok            = (& $countOf 'success')

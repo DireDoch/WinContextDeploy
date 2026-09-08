@@ -320,10 +320,17 @@ console window, a plain text title is shown instead.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "timestamp": "2026-08-29T14:31:00-04:00",
   "computerName": "WKS-01",
-  "context": { "formFactor": "Laptop", "environment": "Workstation", "elevated": true, "language": "fr-CA" },
+  "context": {
+    "formFactor": "Laptop",
+    "environment": "Workstation",
+    "elevated": true,
+    "language": "fr-CA",
+    "serialNumber": "5CG2141ABC",
+    "assetTag": "ACME-004821"
+  },
   "summary": { "ok": 14, "warning": 1, "error": 0, "manual": 7, "notApplicable": 1 },
   "steps": [
     { "step": "AppErpClient", "name": "ERP client", "kind": "warning", "detail": "Not found at C:\\ProgramData\\... -> Update Applications['ERP client'].Target in WinContextDeploy.psd1, or remove the entry." }
@@ -332,7 +339,19 @@ console window, a plain text title is shown instead.
 ```
 
 `schemaVersion` is there from the first release so a collector can version
-against it.
+against it. It is `2`: version 1 carried no `serialNumber` and no `assetTag`.
+
+`serialNumber` and `assetTag` are what make a fleet collection joinable.
+`computerName` was the only machine identifier here, and the tool now offers to
+change it — to a site convention that is usually not the asset tag. Both come
+from SMBIOS: the serial as the factory stamped it, the asset tag as whoever
+provisioned the hardware wrote it.
+
+`assetTag` is empty on most OEM hardware unless your organisation writes it, and
+the OEM placeholders (`No Asset Tag`, `Not Specified`, a run of spaces) are
+normalised to an empty string so "no asset tag" looks the same on every machine.
+An absent asset tag is normal and nothing warns about it. A machine where either
+SMBIOS read fails still produces a report, with an empty string in that field.
 
 ## Tests
 

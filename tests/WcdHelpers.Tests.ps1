@@ -247,7 +247,7 @@ Describe 'WcdHelpers' {
         $json = $report | ConvertTo-Json -Depth 5
         $parsed = $json | ConvertFrom-Json
 
-        $parsed.schemaVersion | Should -Be 1
+        $parsed.schemaVersion | Should -Be 2
         $parsed.timestamp | Should -Not -BeNullOrEmpty
         $parsed.context.formFactor | Should -Be 'Laptop'
         $parsed.context.environment | Should -Be 'Workstation'
@@ -262,6 +262,58 @@ Describe 'WcdHelpers' {
         ($parsed.steps | Where-Object step -eq 'AppErpClient').kind | Should -Be 'warning'
         ($parsed.steps | Where-Object step -eq 'AppErpClient').name | Should -Be 'ERP client'
         ($parsed.steps | Where-Object step -eq 'AppErpClient').detail | Should -Match 'not found'
+    }
+
+    Context 'identifiants machine du rapport' {
+        BeforeAll {
+            $script:ReportOptions = [pscustomobject]@{
+                FormFactor = 'Laptop'; Environment = 'Workstation'; Language = 'fr-CA'
+            }
+        }
+
+        It 'porte le numero de serie et l etiquette d inventaire' {
+            Mock -CommandName 'Get-WcdMachineSerial' { '5CG2141ABC' }
+            Mock -CommandName 'Get-WcdMachineAssetTag' { 'ACME-004821' }
+
+            $report = New-WcdRunReport -ExecutionOptions $script:ReportOptions
+
+            $report.context.serialNumber | Should -Be '5CG2141ABC'
+            $report.context.assetTag | Should -Be 'ACME-004821'
+        }
+
+        It 'reutilise Get-WcdMachineSerial plutot que de relire le BIOS' {
+            Mock -CommandName 'Get-WcdMachineSerial' { '5CG2141ABC' }
+            Mock -CommandName 'Get-WcdMachineAssetTag' { '' }
+
+            New-WcdRunReport -ExecutionOptions $script:ReportOptions | Out-Null
+
+            Should -Invoke 'Get-WcdMachineSerial' -Times 1 -Exactly
+        }
+
+        It 'normalise les valeurs bidons des fabricants en chaine vide' {
+            # Une etiquette absente est normal, pas un constat. Un collecteur de
+            # parc a besoin que "aucune etiquette" ait la meme tete partout.
+            # Teste sur la fonction pure: Get-CimInstance n existe pas sous
+            # Linux et Mock ne peut pas remplacer une commande absente.
+            foreach ($placeholder in @('No Asset Tag', 'Asset Tag', 'Not Specified', 'To Be Filled By O.E.M.', '   ', '', $null)) {
+                Format-WcdAssetTag -RawTag $placeholder | Should -Be '' -Because ('"{0}" est une valeur bidon' -f $placeholder)
+            }
+        }
+
+        It 'garde une vraie etiquette, sans espaces autour' {
+            Format-WcdAssetTag -RawTag '  ACME-004821  ' | Should -Be 'ACME-004821'
+        }
+
+        It 'produit quand meme un rapport quand une lecture CIM echoue' {
+            Mock -CommandName 'Get-WcdMachineSerial' { '' }
+            Mock -CommandName 'Get-WcdMachineAssetTag' { '' }
+
+            $report = New-WcdRunReport -ExecutionOptions $script:ReportOptions
+
+            $report.schemaVersion | Should -Be 2
+            $report.context.serialNumber | Should -Be ''
+            $report.context.assetTag | Should -Be ''
+        }
     }
 
     It 'planifie la progression des modules reseau et imprimante' {
