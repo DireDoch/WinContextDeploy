@@ -225,6 +225,25 @@
     }
 
     # =========================================================================
+    # TIMEZONE
+    # =========================================================================
+    # The timezone every machine in this fleet is expected to be in, as the Id
+    # that 'Get-TimeZone -ListAvailable' prints - not the display name.
+    #
+    #   TimeZone = 'Eastern Standard Time'
+    #
+    # Leave it empty and the checklist reports whatever the machine has without
+    # judging it. That is the right setting for a fleet spanning several
+    # timezones, which would otherwise collect a false warning on every machine
+    # outside the head office.
+    #
+    # The row exists because a wrong timezone with a correct UTC clock still
+    # shows the user the wrong time, and because Kerberos rejects a client
+    # whose clock is more than five minutes from the domain controller's.
+    # =========================================================================
+    TimeZone = ''
+
+    # =========================================================================
     # DOMAIN
     # =========================================================================
     # The domain the machine identity prompt offers to join, and the optional

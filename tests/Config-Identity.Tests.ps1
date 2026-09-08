@@ -87,24 +87,25 @@ Describe 'Config-Identity' {
             }
         }
 
-        It 'ne planifie aucune etape en -NonInteractive, donc le Module est saute' {
-            # -NonInteractive ne demande rien, donc ni nom ni jonction: le plan
-            # est vide, la boucle de modules saute Config-Identity, et la
-            # checklist rapporte les deux lignes comme MANUAL.
+        It 'planifie toujours les etapes d horloge, meme en -NonInteractive' {
+            # -NonInteractive ne demande ni nom ni jonction, mais l outil demande
+            # au technicien s il faut joindre le domaine, donc il doit toujours
+            # pouvoir dire si l horloge du poste y survivrait. Le Module n est
+            # plus saute; les deux lignes d identite restent MANUAL.
             $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor)
 
-            @($plan['Config-Identity']).Count | Should -Be 0
+            @($plan['Config-Identity']) | Should -Be @('TimeZone', 'TimeSync')
         }
 
-        It 'ne planifie que les etapes demandees' {
+        It 'ne planifie que les etapes d identite demandees' {
             $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor -NewComputerName 'POSTE-01')
-            @($plan['Config-Identity']) | Should -Be @('ComputerName')
+            @($plan['Config-Identity']) | Should -Be @('TimeZone', 'TimeSync', 'ComputerName')
 
             $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor -JoinDomain $true)
-            @($plan['Config-Identity']) | Should -Be @('DomainJoin')
+            @($plan['Config-Identity']) | Should -Be @('TimeZone', 'TimeSync', 'DomainJoin')
 
             $plan = Get-WcdModuleProgressPlan -Descriptors (New-TestDescriptor -NewComputerName 'POSTE-01' -JoinDomain $true)
-            @($plan['Config-Identity']) | Should -Be @('ComputerName', 'DomainJoin')
+            @($plan['Config-Identity']) | Should -Be @('TimeZone', 'TimeSync', 'ComputerName', 'DomainJoin')
         }
     }
 

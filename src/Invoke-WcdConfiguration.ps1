@@ -177,6 +177,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Firewall       = 'Firewall'
             FirmwareMode   = 'Boot mode'
             SecureBoot     = 'Secure Boot'
+            TimeZone       = 'Timezone'
+            TimeSync       = 'Time sync'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -324,6 +326,11 @@ $T = if ($ScriptUI -eq 'EN') {
             SecureBootUnsupported = 'Confirm in firmware setup whether this machine can do Secure Boot at all; if it cannot, it cannot run Windows 11 supported.'
             SecureBootUnreadable = 'Read the Secure Boot state by hand in msinfo32 before handover.'
             FirmwareModeUnreadable = 'Windows did not report a boot mode. Check it by hand in msinfo32 under BIOS Mode.'
+            TimeZoneMismatch    = 'Set the timezone before handover. A wrong timezone with a correct UTC clock still shows the user the wrong time.'
+            TimeZoneUnreadable  = 'The machine timezone could not be read. Check it by hand before handover.'
+            TimeSourceCmos      = 'The Windows Time service has no source. Check the machine can reach the domain controllers on UDP 123.'
+            TimeNeverSynced     = 'Resync manually and confirm it takes, before the machine leaves.'
+            TimeSyncUnparseable = 'The Windows Time status could not be read. Run "w32tm /query /status" by hand before handover.'
         }
     }
 } else {
@@ -368,6 +375,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Firewall       = 'Pare-feu'
             FirmwareMode   = 'Mode d amorcage'
             SecureBoot     = 'Demarrage securise'
+            TimeZone       = 'Fuseau horaire'
+            TimeSync       = 'Synchronisation de l heure'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -515,6 +524,11 @@ $T = if ($ScriptUI -eq 'EN') {
             SecureBootUnsupported = 'Confirmer dans la configuration du micrologiciel si ce poste peut faire le demarrage securise; sinon il ne peut pas executer Windows 11 de facon supportee.'
             SecureBootUnreadable = 'Lire l etat du demarrage securise a la main dans msinfo32 avant la remise.'
             FirmwareModeUnreadable = 'Windows n a pas rapporte de mode d amorcage. Le verifier a la main dans msinfo32, sous Mode BIOS.'
+            TimeZoneMismatch    = 'Regler le fuseau horaire avant la remise. Un mauvais fuseau avec une horloge UTC correcte affiche quand meme la mauvaise heure a l utilisateur.'
+            TimeZoneUnreadable  = 'Le fuseau horaire du poste n a pas pu etre lu. Le verifier a la main avant la remise.'
+            TimeSourceCmos      = 'Le service de temps Windows n a aucune source. Verifier que le poste joint les controleurs de domaine sur UDP 123.'
+            TimeNeverSynced     = 'Resynchroniser a la main et confirmer que cela tient, avant que le poste parte.'
+            TimeSyncUnparseable = 'L etat du service de temps Windows n a pas pu etre lu. Lancer "w32tm /query /status" a la main avant la remise.'
         }
     }
 }

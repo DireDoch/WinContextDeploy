@@ -124,6 +124,381 @@ function Get-WcdJoinCredential {
     return (Get-Credential -Message $Message)
 }
 
+# --- The clock, which a domain join depends on -------------------------------
+# Kerberos rejects an authentication attempt when the client's clock is more
+# than five minutes from the domain controller's - the default MaxTolerance,
+# and not generous. A freshly imaged machine with a dead CMOS battery, a wrong
+# timezone or a Windows Time service that never found a source joins the domain
+# and then fails to authenticate, in a way that looks like anything except a
+# clock problem.
+
+# A successful sync older than this is worth mentioning. A machine straight off
+# the bench syncs within minutes of first boot; a week of silence means the
+# Windows Time service is not reaching anything.
+$script:WcdTimeSyncWarningDays = 7
+
+function Get-WcdMachineTimeZone {
+    <#
+    .SYNOPSIS
+        Returns the machine's current timezone.
+
+    .DESCRIPTION
+        Thin wrapper over Get-TimeZone, so the Step has a seam the tests can mock.
+
+    .OUTPUTS
+        The timezone, with Id and DisplayName. Throws when it cannot be read.
+
+    .EXAMPLE
+        (Get-WcdMachineTimeZone).Id   # Eastern Standard Time
+    #>
+    [CmdletBinding()]
+    param()
+
+    return (Get-TimeZone -ErrorAction Stop)
+}
+
+function Get-WcdTimeStatusOutput {
+    <#
+    .SYNOPSIS
+        Returns the raw lines of w32tm /query /status.
+
+    .DESCRIPTION
+        Thin wrapper over w32tm.exe, so the Step has a seam the tests can mock.
+        Querying needs no elevation.
+
+        Deliberately only /query. Running 'w32tm /resync /force' is a fix rather
+        than a check, and it fails noisily on a machine with no reachable time
+        source - which is precisely the machine this Step exists to find.
+
+    .OUTPUTS
+        [string[]] The command's output lines.
+
+    .EXAMPLE
+        Get-WcdTimeStatusOutput | Select-Object -First 3
+    #>
+    [CmdletBinding()]
+    param()
+
+    return @(& 'w32tm.exe' '/query' '/status' 2>&1 | ForEach-Object { [string]$_ })
+}
+
+function ConvertFrom-WcdTimeStatus {
+    <#
+    .SYNOPSIS
+        Parses w32tm /query /status into the two fields that matter.
+
+    .DESCRIPTION
+        The output is plain text and localized: on a French Windows every field
+        label is in French. So nothing here matches a label. The output is a
+        fixed sequence of "label<separator>value" lines - leap indicator,
+        stratum, precision, root delay, root dispersion, reference id, last
+        successful sync time, source, poll interval - and the value is taken by
+        its position in that sequence.
+
+        Everything after the first colon is the value, which is why the French
+        " : " separator and the English ": " both work, and why a value holding
+        its own colons - a timestamp, an IP - survives.
+
+        A block that does not parse is its own answer. A machine whose w32tm
+        output this cannot read is a machine to look at by hand, not a machine
+        with a bad clock, and the two must not print the same sentence.
+
+    .PARAMETER Lines
+        The output of Get-WcdTimeStatusOutput.
+
+    .OUTPUTS
+        [hashtable] with Parsed, Source, LastSync and NeverSynced.
+
+    .EXAMPLE
+        (ConvertFrom-WcdTimeStatus -Lines $lines).Source   # Local CMOS Clock
+    #>
+    [CmdletBinding()]
+    param(
+        [string[]]$Lines = @()
+    )
+
+    $values = @()
+    foreach ($line in @($Lines)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = $line -split ':\s*', 2
+        if ($parts.Count -ne 2) { continue }
+        $values += [string]$parts[1].Trim()
+    }
+
+    # Position 6 is the last successful sync, 7 the source. Fewer fields than
+    # that means the command did not answer with a status block at all.
+    if ($values.Count -lt 8) {
+        return @{ Parsed = $false; Source = ''; LastSync = $null; NeverSynced = $false }
+    }
+
+    $lastSyncText = $values[6]
+    $source = $values[7]
+
+    if ([string]::IsNullOrWhiteSpace($source)) {
+        return @{ Parsed = $false; Source = ''; LastSync = $null; NeverSynced = $false }
+    }
+
+    # w32tm formats the timestamp in the machine's own locale, so the machine's
+    # own culture reads it. Invariant is the fallback, not the first try.
+    $lastSync = $null
+    foreach ($culture in @([cultureinfo]::CurrentCulture, [cultureinfo]::InvariantCulture)) {
+        try {
+            $lastSync = [datetime]::Parse($lastSyncText, $culture)
+            break
+        } catch {
+        }
+    }
+
+    # A block that parsed but reports no timestamp is a machine that has never
+    # synced - 'unspecified', or whatever that word is in the machine's language.
+    return @{ Parsed      = $true
+              Source      = $source
+              LastSync    = $lastSync
+              NeverSynced = ($null -eq $lastSync) }
+}
+
+function Get-WcdTimeZoneInfo {
+    <#
+    .SYNOPSIS
+        Compares the machine's timezone against the manifest's expected one.
+
+    .DESCRIPTION
+        With no expected zone declared, the current one is reported and nothing
+        is judged: a fleet spanning several timezones must not collect a false
+        warning on every machine outside the head office.
+
+    .PARAMETER TimeZone
+        What Get-WcdMachineTimeZone returned.
+
+    .PARAMETER Expected
+        The manifest's expected zone Id, or empty when it declares none.
+
+    .OUTPUTS
+        [hashtable] with Severity, Label and, on a mismatch, RemedyKey.
+
+    .EXAMPLE
+        Get-WcdTimeZoneInfo -TimeZone (Get-WcdMachineTimeZone) -Expected 'Eastern Standard Time'
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        $TimeZone,
+
+        [string]$Expected
+    )
+
+    if ($null -eq $TimeZone) {
+        return @{ Severity = 'WARNING'; Label = 'The machine timezone could not be read.' }
+    }
+
+    $id = [string]$TimeZone.Id
+    $display = [string]$TimeZone.DisplayName
+    $current = if ([string]::IsNullOrWhiteSpace($display)) { $id } else { '{0} ({1})' -f $id, $display }
+
+    if ([string]::IsNullOrWhiteSpace($Expected)) {
+        return @{ Severity = 'INFO'; Label = ('Timezone is {0}.' -f $current) }
+    }
+
+    if ($id -eq $Expected) {
+        return @{ Severity = 'INFO'; Label = ('Timezone is {0}, as the manifest expects.' -f $current) }
+    }
+
+    return @{ Severity  = 'WARNING'
+              Label     = ('Timezone is {0}; the manifest expects {1}.' -f $current, $Expected)
+              RemedyKey = 'TimeZoneMismatch' }
+}
+
+function Get-WcdTimeSyncInfo {
+    <#
+    .SYNOPSIS
+        Turns a parsed w32tm status into a severity and a label.
+
+    .DESCRIPTION
+        A source of 'Local CMOS Clock' means the Windows Time service never
+        found a time source and the machine is running off its own hardware
+        clock. On a machine that is domain-joined or about to be, that is the
+        clock problem this Step exists to find. On a standalone machine it is
+        normal, so it is reported without being judged.
+
+        The source name is localized on a localized Windows, so the match is on
+        'CMOS' - an acronym that survives translation - rather than on the whole
+        English phrase.
+
+        No offset is measured. 'w32tm /stripchart' gives a real number but needs
+        the domain reachable and takes seconds per sample, which turns a
+        checklist row into a network test. The source and the last sync answer
+        the question that matters at bring-up.
+
+    .PARAMETER Status
+        A hashtable from ConvertFrom-WcdTimeStatus.
+
+    .PARAMETER DomainJoined
+        Whether the machine is on a domain, or about to be joined this run.
+
+    .PARAMETER WarningDays
+        A successful sync older than this many days is warned about.
+
+    .PARAMETER Now
+        Taken as the current time, so the age is testable. Defaults to now.
+
+    .OUTPUTS
+        [hashtable] with Severity, Label and, when there is one, RemedyKey.
+
+    .EXAMPLE
+        Get-WcdTimeSyncInfo -Status $status -DomainJoined $true
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Status,
+
+        [bool]$DomainJoined = $false,
+
+        [int]$WarningDays = 7,
+
+        [datetime]$Now = [datetime]::Now
+    )
+
+    if (-not $Status.Parsed) {
+        return @{ Severity  = 'WARNING'
+                  Label     = 'The Windows Time status could not be parsed, so the clock was not checked.'
+                  RemedyKey = 'TimeSyncUnparseable' }
+    }
+
+    $source = [string]$Status.Source
+
+    if ($source -match 'CMOS') {
+        if ($DomainJoined) {
+            return @{ Severity  = 'WARNING'
+                      Label     = ('The Windows Time service has no time source; the clock is running off "{0}".' -f $source)
+                      RemedyKey = 'TimeSourceCmos' }
+        }
+
+        return @{ Severity = 'INFO'
+                  Label    = ('The clock is running off "{0}". This machine is not on a domain, so nothing depends on it yet.' -f $source) }
+    }
+
+    if ($Status.NeverSynced) {
+        return @{ Severity  = 'WARNING'
+                  Label     = ('The clock has never synced successfully with "{0}".' -f $source)
+                  RemedyKey = 'TimeNeverSynced' }
+    }
+
+    $age = $Now - [datetime]$Status.LastSync
+    if ($age.TotalDays -gt $WarningDays) {
+        return @{ Severity  = 'WARNING'
+                  Label     = ('The clock last synced with "{0}" {1:N0} days ago.' -f $source, $age.TotalDays)
+                  RemedyKey = 'TimeNeverSynced' }
+    }
+
+    return @{ Severity = 'INFO'
+              Label    = ('The clock syncs with "{0}", last successful sync {1}.' -f $source, ([datetime]$Status.LastSync).ToString('yyyy-MM-dd HH:mm')) }
+}
+
+function Test-WcdDomainJoined {
+    <#
+    .SYNOPSIS
+        Reports whether the machine is currently a domain member.
+
+    .DESCRIPTION
+        Thin wrapper over Win32_ComputerSystem, so the Step has a seam the tests
+        can mock. A read that fails answers $false rather than throwing: the
+        clock check degrades to reporting rather than judging, which is the
+        safer half of the answer.
+
+    .OUTPUTS
+        [bool] $true when the machine is on a domain.
+
+    .EXAMPLE
+        Test-WcdDomainJoined
+    #>
+    [CmdletBinding()]
+    param()
+
+    try {
+        return [bool](Get-CimInstance -ClassName 'Win32_ComputerSystem' -ErrorAction Stop).PartOfDomain
+    } catch {
+        return $false
+    }
+}
+
+function Set-WcdClockStatus {
+    <#
+    .SYNOPSIS
+        Reports the timezone and the Windows Time sync state.
+
+    .DESCRIPTION
+        Two read-only Steps, in the Module that already owns the domain
+        conversation, because that is what they exist to protect: the tool
+        already asks whether to join the domain, so it should be able to say
+        whether the machine's clock can survive it.
+
+        Neither Step needs elevation and neither changes anything - not the
+        timezone, and not the time service.
+
+    .PARAMETER ExpectedTimeZone
+        The manifest's expected zone Id, or empty when it declares none.
+
+    .PARAMETER JoinDomain
+        Whether this run is about to join the domain. Together with current
+        membership, this is what makes a CMOS clock source a warning.
+
+    .PARAMETER LogPath
+        Full path to the log file. Resolved automatically when omitted.
+
+    .PARAMETER ProgressCallback
+        Scriptblock invoked at the start and end of each step for progress display.
+
+    .OUTPUTS
+        [pscustomobject[]] with Step, Success, Severity and Error.
+
+    .EXAMPLE
+        Set-WcdClockStatus -ExpectedTimeZone 'Eastern Standard Time' -LogPath 'C:\temp\log.txt'
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$ExpectedTimeZone,
+
+        [bool]$JoinDomain = $false,
+
+        [string]$LogPath,
+
+        [scriptblock]$ProgressCallback
+    )
+
+    $resolvedLogPath = Resolve-WcdLogPath -CandidatePath $LogPath
+    $moduleName = 'Config-Identity'
+    $expected = $ExpectedTimeZone
+    $warningDays = $script:WcdTimeSyncWarningDays
+    $wantsJoin = $JoinDomain
+    $results = @()
+
+    $results += Invoke-WcdStep -Module $moduleName -Key 'TimeZone' `
+        -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+        -FailureLabel 'Timezone' -FailureRemedy 'TimeZoneUnreadable' `
+        -Action {
+            $info = Get-WcdTimeZoneInfo -TimeZone (Get-WcdMachineTimeZone) -Expected $expected
+            $fragment = @{ Severity = $info.Severity; Error = $info.Label; Log = 'Identity: {0}' -f $info.Label }
+            if ($info.ContainsKey('RemedyKey')) { $fragment['RemedyKey'] = $info.RemedyKey }
+            return $fragment
+        }
+
+    $results += Invoke-WcdStep -Module $moduleName -Key 'TimeSync' `
+        -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
+        -FailureLabel 'Time sync' -FailureRemedy 'TimeSyncUnparseable' `
+        -Action {
+            $domainJoined = $wantsJoin -or (Test-WcdDomainJoined)
+            $status = ConvertFrom-WcdTimeStatus -Lines (Get-WcdTimeStatusOutput)
+            $info = Get-WcdTimeSyncInfo -Status $status -DomainJoined $domainJoined -WarningDays $warningDays
+
+            $fragment = @{ Severity = $info.Severity; Error = $info.Label; Log = 'Identity: {0}' -f $info.Label }
+            if ($info.ContainsKey('RemedyKey')) { $fragment['RemedyKey'] = $info.RemedyKey }
+            return $fragment
+        }
+
+    return $results
+}
+
 function Set-WcdMachineIdentity {
     <#
     .SYNOPSIS
@@ -370,8 +745,10 @@ function Get-WcdIdentityDescriptor {
         Declares what Config-Identity contributes to the run.
 
     .DESCRIPTION
-        Two Steps that only exist when the technician asked for them: a run that
-        declined both plans nothing, and the run loop skips the Module.
+        The clock Steps always run: the tool asks whether to join the domain,
+        so it should always be able to say whether the machine's clock can
+        survive it. The identity Steps only exist when the technician asked for
+        them, and a run that declined both still runs the Module for the clock.
 
         A Module declares itself here instead of in six places across the
         orchestrator and the helpers. See Test-WcdModuleDescriptor in
@@ -417,10 +794,14 @@ function Get-WcdIdentityDescriptor {
         Order    = 10
         RowOrder = 10
         Steps    = @(
+            @{ Key = 'TimeZone';     Label = 'Timezone' }
+            @{ Key = 'TimeSync';     Label = 'Time sync' }
             @{ Key = 'ComputerName'; Label = 'Computer name'; Planned = $wantsRename }
             @{ Key = 'DomainJoin';   Label = 'Domain join';   Planned = $wantsJoin }
         )
         Rows     = @(
+            @{ Label = $Translations.Checklist.TimeZone; Steps = @('TimeZone') }
+            @{ Label = $Translations.Checklist.TimeSync; Steps = @('TimeSync') }
             @{ Label = $Translations.Checklist.ComputerName; Steps = @('ComputerName')
                MissingKind = 'manual'; MissingDetail = $Translations.IdentityManualDetail }
             @{ Label = $Translations.Checklist.DomainJoin;   Steps = @('DomainJoin')
@@ -432,7 +813,16 @@ function Get-WcdIdentityDescriptor {
             $domainName = if ($null -ne $ctx.DomainTarget) { [string]$ctx.DomainTarget.Name } else { '' }
             $ouPath = if ($null -ne $ctx.DomainTarget) { [string]$ctx.DomainTarget.OUPath } else { '' }
 
-            Set-WcdMachineIdentity `
+            $expectedZone = ''
+            if ($null -ne $ctx.Config -and $ctx.Config.ContainsKey('TimeZone')) {
+                $expectedZone = [string]$ctx.Config['TimeZone']
+            }
+
+            $results = @(Set-WcdClockStatus -ExpectedTimeZone $expectedZone `
+                -JoinDomain $ctx.ExecutionOptions.JoinDomain `
+                -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback)
+
+            $results += Set-WcdMachineIdentity `
                 -NewComputerName $ctx.ExecutionOptions.NewComputerName `
                 -JoinDomain $ctx.ExecutionOptions.JoinDomain `
                 -DomainName $domainName `
@@ -440,6 +830,8 @@ function Get-WcdIdentityDescriptor {
                 -Elevated $ctx.Elevated `
                 -PromptMessage ($ctx.Translations.CredentialPrompt -f $domainName) `
                 -LogPath $ctx.LogPath -ProgressCallback $ctx.ProgressCallback
+
+            return $results
         }
     }
 }
