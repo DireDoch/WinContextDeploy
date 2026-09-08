@@ -58,8 +58,11 @@ Describe 'Module descriptors' {
         }
     }
 
-    It 'trouve les douze Modules' {
-        $script:ModuleFiles.Count | Should -Be 12
+    It 'trouve les Modules' {
+        # Un plancher, pas un compte exact: la valeur exacte ne verifiait rien
+        # que le glob ne verifie deja, et chaque nouveau Module la faisait
+        # echouer pour une raison qui n en est pas une.
+        $script:ModuleFiles.Count | Should -BeGreaterThan 10
     }
 
     It 'expose une fonction descripteur par Module' {

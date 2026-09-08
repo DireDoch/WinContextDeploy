@@ -309,11 +309,15 @@ function Get-WcdResultSeverity {
         only Success, so a $false Success is read as 'ERROR' and anything else
         as 'INFO'.
 
+        'NA' is what a Step returns when it ran and found the check does not
+        apply to this machine. Resolve-WcdAutomaticEntry turns it into the Not
+        Applicable row; nothing else here needs to know.
+
     .PARAMETER Result
         A Step Result object.
 
     .OUTPUTS
-        [string] 'ERROR', 'WARNING', 'MANUAL' or 'INFO'.
+        [string] 'ERROR', 'WARNING', 'NA', 'MANUAL' or 'INFO'.
 
     .EXAMPLE
         Get-WcdResultSeverity -Result ([pscustomobject]@{ Step = 'X'; Success = $false })   # ERROR

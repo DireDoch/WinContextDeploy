@@ -322,6 +322,14 @@ function Resolve-WcdAutomaticEntry {
         return New-WcdDiagnosticEntry -Label $Label -Kind 'warning' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels) -Step $stepId
     }
 
+    # A Step that ran and found the check does not apply to this machine - a
+    # third-party antivirus owning Defender, a legacy BIOS with no Secure Boot.
+    # The descriptor cannot know that in advance, which is why the Result says
+    # so and this reads it: Not Applicable is an outcome, not a green tick.
+    if ($severity -eq 'NA') {
+        return New-WcdDiagnosticEntry -Label $Label -Kind 'na' -Detail (Get-WcdAggregateDetail -Results $results -StepLabels $StepLabels) -Step $stepId
+    }
+
     # A Step the Module could not run, and deliberately handed back to the
     # technician, is a Manual Step rather than a failure.
     if ($severity -eq 'MANUAL') {

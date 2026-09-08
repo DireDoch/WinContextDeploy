@@ -172,6 +172,9 @@ $T = if ($ScriptUI -eq 'EN') {
             ComputerName   = 'Computer name'
             DomainJoin     = 'Domain membership'
             RestartNeeded  = 'Restart required'
+            Activation     = 'Windows activation'
+            Antivirus      = 'Antivirus'
+            Firewall       = 'Firewall'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -307,6 +310,13 @@ $T = if ($ScriptUI -eq 'EN') {
             DomainJoinFailed    = 'The domain join failed. Check the domain is reachable, the account may join machines, and Domain.OUPath in WinContextDeploy.psd1 exists.'
             JoinCancelled       = 'The credential dialog was cancelled. Re-run and supply a domain account, or join the machine by hand.'
             BitLockerUnavailable = 'This edition does not support BitLocker. Confirm the machine should ship on it, or reimage with an edition that does.'
+            WindowsNotActivated = 'Check the KMS or MAK path for this image, and that the machine reached the activation host on this network.'
+            ActivationUnreadable = 'Windows licensing could not be read through CIM. Confirm activation by hand with "slmgr /dlv" before handover.'
+            RealTimeProtectionOff = 'Turn real-time protection back on before handover, or confirm the third-party antivirus that disabled it is the intended one.'
+            AntivirusSignaturesStale = 'Let Defender update its signatures before handover; they are older than {0} days.'
+            DefenderUnavailable = 'Defender did not answer. Confirm which antivirus owns this machine, and that it is running, before handover.'
+            FirewallProfileOff  = 'Re-enable the profile before handover, or confirm a policy disables it deliberately.'
+            FirewallUnreadable  = 'The firewall profiles could not be read. Check them by hand in wf.msc before handover.'
         }
     }
 } else {
@@ -346,6 +356,9 @@ $T = if ($ScriptUI -eq 'EN') {
             ComputerName   = 'Nom du poste'
             DomainJoin     = 'Appartenance au domaine'
             RestartNeeded  = 'Redemarrage requis'
+            Activation     = 'Activation de Windows'
+            Antivirus      = 'Antivirus'
+            Firewall       = 'Pare-feu'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -481,6 +494,13 @@ $T = if ($ScriptUI -eq 'EN') {
             DomainJoinFailed    = 'La jonction au domaine a echoue. Verifier que le domaine est joignable, que le compte peut joindre des postes, et que Domain.OUPath dans WinContextDeploy.psd1 existe.'
             JoinCancelled       = 'La fenetre d identifiants a ete annulee. Relancer et fournir un compte de domaine, ou joindre le poste a la main.'
             BitLockerUnavailable = 'Cette edition ne prend pas en charge BitLocker. Confirmer que le poste doit etre remis avec cette edition, ou reimager avec une edition qui la prend en charge.'
+            WindowsNotActivated = 'Verifier le chemin KMS ou MAK de cette image, et que le poste a joint l hote d activation sur ce reseau.'
+            ActivationUnreadable = 'La licence Windows n a pas pu etre lue par CIM. Confirmer l activation a la main avec "slmgr /dlv" avant la remise.'
+            RealTimeProtectionOff = 'Reactiver la protection en temps reel avant la remise, ou confirmer que l antivirus tiers qui l a desactivee est bien celui voulu.'
+            AntivirusSignaturesStale = 'Laisser Defender mettre a jour ses signatures avant la remise; elles ont plus de {0} jours.'
+            DefenderUnavailable = 'Defender n a pas repondu. Confirmer quel antivirus gere ce poste, et qu il fonctionne, avant la remise.'
+            FirewallProfileOff  = 'Reactiver le profil avant la remise, ou confirmer qu une strategie le desactive volontairement.'
+            FirewallUnreadable  = 'Les profils du pare-feu n ont pas pu etre lus. Les verifier a la main dans wf.msc avant la remise.'
         }
     }
 }

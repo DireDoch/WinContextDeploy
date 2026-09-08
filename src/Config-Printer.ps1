@@ -173,7 +173,7 @@ function Get-WcdPrinterDescriptor {
     .EXAMPLE
         Get-WcdPrinterDescriptor -ExecutionOptions $options -Config $config -Translations $T
     #>
-    # The signature is a contract: the orchestrator calls all twelve descriptors
+    # The signature is a contract: the orchestrator calls every descriptor
     # the same way, so each declares all three parameters even when it reads one.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
         Justification = 'Uniform descriptor signature; the orchestrator calls every Module identically.')]
