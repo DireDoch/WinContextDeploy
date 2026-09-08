@@ -276,20 +276,23 @@ function Set-WcdSecurityStatus {
 
     $results += Invoke-WcdStep -Module $moduleName -Key 'AntivirusStatus' `
         -LogPath $resolvedLogPath -ProgressCallback $ProgressCallback `
-        -FailureLabel 'Antivirus status' `
-        -OnFailure {
-            param($errorRecord)
-
+        -FailureLabel 'Antivirus status' -FailureRemedy 'DefenderUnavailable' `
+        -Action {
             # A missing Get-MpComputerStatus and a Defender that is switched off
             # are not the same machine, and must not read as the same row.
-            @{ Severity = 'WARNING'
-               Success  = $true
-               Error    = ('Defender status could not be read: {0}' -f $errorRecord.Exception.Message)
-               RemedyKey = 'DefenderUnavailable'
-               Log      = 'Security: Defender status could not be read: {0}' -f $errorRecord.Exception.Message }
-        } `
-        -Action {
-            $info = Get-WcdDefenderStatusInfo -Status (Get-WcdDefenderStatus) -SignatureAgeWarningDays $signatureAgeDays
+            # Caught here rather than in -OnFailure: Invoke-WcdStep marks
+            # anything that threw as a failed Step, and an image built without
+            # the Defender feature has not failed a Step, it has answered.
+            try {
+                $status = Get-WcdDefenderStatus
+            } catch {
+                return @{ Severity  = 'WARNING'
+                          Error     = ('Defender status could not be read: {0}' -f $_.Exception.Message)
+                          RemedyKey = 'DefenderUnavailable'
+                          Log       = 'Security: Defender status could not be read: {0}' -f $_.Exception.Message }
+            }
+
+            $info = Get-WcdDefenderStatusInfo -Status $status -SignatureAgeWarningDays $signatureAgeDays
             $fragment = @{ Severity = $info.Severity; Error = $info.Label; Log = 'Security: {0}' -f $info.Label }
             if ($info.ContainsKey('RemedyKey'))  { $fragment['RemedyKey'] = $info.RemedyKey }
             if ($info.ContainsKey('RemedyArgs')) { $fragment['RemedyArgs'] = $info.RemedyArgs }

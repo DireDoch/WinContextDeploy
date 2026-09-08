@@ -175,6 +175,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Activation     = 'Windows activation'
             Antivirus      = 'Antivirus'
             Firewall       = 'Firewall'
+            FirmwareMode   = 'Boot mode'
+            SecureBoot     = 'Secure Boot'
         }
         KeyLaptop               = 'L'
         KeyDesktop              = 'D'
@@ -317,6 +319,11 @@ $T = if ($ScriptUI -eq 'EN') {
             DefenderUnavailable = 'Defender did not answer. Confirm which antivirus owns this machine, and that it is running, before handover.'
             FirewallProfileOff  = 'Re-enable the profile before handover, or confirm a policy disables it deliberately.'
             FirewallUnreadable  = 'The firewall profiles could not be read. Check them by hand in wf.msc before handover.'
+            LegacyBios          = 'The machine cannot run Windows 11 supported. Converting needs mbr2gpt and a firmware change, which is a reimage decision rather than a checklist fix.'
+            SecureBootOff       = 'Enable Secure Boot in firmware setup. It may require the boot mode to already be UEFI-only.'
+            SecureBootUnsupported = 'Confirm in firmware setup whether this machine can do Secure Boot at all; if it cannot, it cannot run Windows 11 supported.'
+            SecureBootUnreadable = 'Read the Secure Boot state by hand in msinfo32 before handover.'
+            FirmwareModeUnreadable = 'Windows did not report a boot mode. Check it by hand in msinfo32 under BIOS Mode.'
         }
     }
 } else {
@@ -359,6 +366,8 @@ $T = if ($ScriptUI -eq 'EN') {
             Activation     = 'Activation de Windows'
             Antivirus      = 'Antivirus'
             Firewall       = 'Pare-feu'
+            FirmwareMode   = 'Mode d amorcage'
+            SecureBoot     = 'Demarrage securise'
         }
         KeyLaptop               = 'P'
         KeyDesktop              = 'B'
@@ -501,6 +510,11 @@ $T = if ($ScriptUI -eq 'EN') {
             DefenderUnavailable = 'Defender n a pas repondu. Confirmer quel antivirus gere ce poste, et qu il fonctionne, avant la remise.'
             FirewallProfileOff  = 'Reactiver le profil avant la remise, ou confirmer qu une strategie le desactive volontairement.'
             FirewallUnreadable  = 'Les profils du pare-feu n ont pas pu etre lus. Les verifier a la main dans wf.msc avant la remise.'
+            LegacyBios          = 'Le poste ne peut pas executer Windows 11 de facon supportee. La conversion demande mbr2gpt et un changement au micrologiciel, ce qui est une decision de reimage et non une correction de liste.'
+            SecureBootOff       = 'Activer le demarrage securise dans la configuration du micrologiciel. Le mode d amorcage doit deja etre UEFI seulement.'
+            SecureBootUnsupported = 'Confirmer dans la configuration du micrologiciel si ce poste peut faire le demarrage securise; sinon il ne peut pas executer Windows 11 de facon supportee.'
+            SecureBootUnreadable = 'Lire l etat du demarrage securise a la main dans msinfo32 avant la remise.'
+            FirmwareModeUnreadable = 'Windows n a pas rapporte de mode d amorcage. Le verifier a la main dans msinfo32, sous Mode BIOS.'
         }
     }
 }

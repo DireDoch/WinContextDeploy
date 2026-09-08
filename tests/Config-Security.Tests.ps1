@@ -151,6 +151,7 @@ Describe 'Config-Security' {
             $result = Set-WcdSecurityStatus -LogPath $script:LogPath | Where-Object Step -eq 'AntivirusStatus'
 
             $result.Severity | Should -Be 'WARNING'
+            $result.Success | Should -BeTrue
             $result.RemedyKey | Should -Be 'DefenderUnavailable'
             $result.RemedyKey | Should -Not -Be 'RealTimeProtectionOff'
         }
